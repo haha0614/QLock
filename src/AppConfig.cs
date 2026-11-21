@@ -27,7 +27,7 @@ namespace QLock
         [DataMember] public string Autostart = "none";
         [DataMember] public bool LockOnStartup = false;
 
-        [DataMember] public bool BackgroundSnapshot = true;
+        [DataMember] public bool BackgroundSnapshot = false;
         [DataMember] public bool ShowClock = true;
         [DataMember] public string Subtitle = "输入密码解锁";
 
@@ -49,7 +49,7 @@ namespace QLock
             RunElevated = false;
             Autostart = "none";
             LockOnStartup = false;
-            BackgroundSnapshot = true;
+            BackgroundSnapshot = false;
             ShowClock = true;
             Subtitle = "输入密码解锁";
         }
