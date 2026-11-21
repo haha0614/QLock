@@ -14,6 +14,7 @@ namespace QLock
         readonly AppConfig cfg;
         readonly bool firstRun;
         readonly Action<AppConfig> onSaved;
+        readonly Action onCheckUpdate;
 
         PasswordBox pwd1;
         TextBox pwdReveal;
@@ -28,11 +29,12 @@ namespace QLock
         TextBox subtitleBox;
         string pendingRecovery;
 
-        public SettingsWindow(AppConfig current, bool firstRun, Action<AppConfig> onSaved)
+        public SettingsWindow(AppConfig current, bool firstRun, Action<AppConfig> onSaved, Action onCheckUpdate)
         {
             cfg = current.Clone();
             this.firstRun = firstRun;
             this.onSaved = onSaved;
+            this.onCheckUpdate = onCheckUpdate;
             pendingRecovery = null;
 
             Win = new Window();
@@ -212,6 +214,30 @@ namespace QLock
             envText.TextWrapping = TextWrapping.Wrap;
             envText.Margin = new Thickness(0, 10, 0, 0);
             start.Children.Add(envText);
+
+            // ---- about / update ----
+            StackPanel about = Ui.Section("关于与更新");
+            stack.Children.Add(Ui.Card(about, 12));
+
+            TextBlock verText = Ui.Text("QLock " + Updater.VersionText(Updater.CurrentVersion()) + "　每天第一次启动时自动检查一次更新。", 12, Ui.TextPrimary, FontWeights.Normal);
+            verText.TextWrapping = TextWrapping.Wrap;
+            about.Children.Add(verText);
+
+            StackPanel updRow = new StackPanel();
+            updRow.Orientation = Orientation.Horizontal;
+            updRow.Margin = new Thickness(0, 10, 0, 0);
+            about.Children.Add(updRow);
+
+            Button checkBtn = Ui.Button("检查更新", false);
+            checkBtn.Width = 110;
+            checkBtn.Click += delegate { if (onCheckUpdate != null) onCheckUpdate(); };
+            updRow.Children.Add(checkBtn);
+
+            TextBlock updHint = Ui.Text("有新版本时会先给你看更新内容，确认后才下载替换。", 11.5, Ui.TextSecondary, FontWeights.Normal);
+            updHint.TextWrapping = TextWrapping.Wrap;
+            updHint.VerticalAlignment = VerticalAlignment.Center;
+            updHint.Margin = new Thickness(12, 0, 0, 0);
+            updRow.Children.Add(updHint);
 
             // ---- footer ----
             Border footer = new Border();

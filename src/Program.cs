@@ -36,6 +36,7 @@ namespace QLock
         DispatcherTimer idleTimer;
         TrayIcon tray;
         SettingsWindow settings;
+        UpdateWindow updateWindow;
 
         public AppConfig Config;
         public LockController Controller;
@@ -79,6 +80,7 @@ namespace QLock
             }
 
             Config = ConfigStore.Load();
+            Updater.CleanupOld();
 
             if (Config.RunElevated && !Native.IsElevated() && !HasArg("--elevated"))
             {
@@ -122,6 +124,119 @@ namespace QLock
             else if (HasArg("--settings")) ShowSettings();
             else if (!Config.HasPassword) OpenSettings(true);
             else if (Config.LockOnStartup) LockNow();
+
+            if (HasArg("--check-update")) CheckForUpdates(true);
+            else ScheduleUpdateCheck();
+        }
+
+        void ScheduleUpdateCheck()
+        {
+            if (!Updater.ShouldAutoCheck(Config)) return;
+            DispatcherTimer timer = new DispatcherTimer();
+            timer.Interval = TimeSpan.FromSeconds(8);
+            timer.Tick += delegate
+            {
+                if (Controller != null && Controller.IsLocked)
+                {
+                    timer.Interval = TimeSpan.FromSeconds(30);
+                    return;
+                }
+                timer.Stop();
+                CheckForUpdates(false);
+            };
+            timer.Start();
+        }
+
+        public void CheckForUpdates(bool manual)
+        {
+            if (Controller != null && Controller.IsLocked)
+            {
+                if (manual) Notify("锁屏中不检查更新", "解锁之后再试。");
+                return;
+            }
+            Log.Write("update: checking (" + (manual ? "manual" : "auto") + ")");
+            Thread worker = new Thread(delegate ()
+            {
+                ReleaseInfo info = null;
+                string error = null;
+                try { info = Updater.Check(); }
+                catch (Exception ex) { error = Updater.DescribeWebError(ex); }
+                Dispatcher.BeginInvoke(new Action(delegate { OnUpdateChecked(info, error, manual); }));
+            });
+            worker.IsBackground = true;
+            worker.Start();
+        }
+
+        void OnUpdateChecked(ReleaseInfo info, string error, bool manual)
+        {
+            if (error != null)
+            {
+                Log.Write("update check failed: " + error);
+                if (manual)
+                    MessageBox.Show("检查更新失败：" + error, "QLock 更新", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            Version current = Updater.CurrentVersion();
+            bool newer = Updater.IsNewer(info.Tag, current);
+            Log.Write("update: latest=" + info.Tag + " current=" + Updater.VersionText(current) + " newer=" + newer);
+
+            Updater.MarkChecked(Config);
+            ConfigStore.Save(Config);
+
+            if (!newer)
+            {
+                if (manual)
+                    MessageBox.Show("已经是最新版本 " + Updater.VersionText(current) + "。", "QLock 更新", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (!manual && string.Equals(info.Tag, Config.SkippedVersion, StringComparison.OrdinalIgnoreCase)) return;
+            OpenUpdateWindow(info);
+        }
+
+        void OpenUpdateWindow(ReleaseInfo info)
+        {
+            if (updateWindow != null)
+            {
+                updateWindow.Win.Activate();
+                return;
+            }
+            UpdateWindow w = new UpdateWindow(this, info, SkipVersion);
+            w.Win.Closed += delegate { updateWindow = null; };
+            updateWindow = w;
+            w.Win.Show();
+            w.Win.Activate();
+        }
+
+        public void SkipVersion(string tag)
+        {
+            Config.SkippedVersion = tag == null ? "" : tag;
+            ConfigStore.Save(Config);
+            Log.Write("update: skipped " + tag);
+        }
+
+        public void RestartForUpdate()
+        {
+            if (stopping) return;
+            stopping = true;
+            Log.Write("update: handing over to the new version");
+
+            if (idleTimer != null) idleTimer.Stop();
+            if (Controller != null) Controller.Shutdown();
+            if (tray != null)
+            {
+                tray.Dispose();
+                tray = null;
+            }
+
+            ReleaseInstance();
+            try { Updater.StartInstalled(); }
+            catch (Exception ex)
+            {
+                Log.Write("update: restart failed: " + ex.Message);
+                MessageBox.Show("新版本已经装好了，但启动失败：" + ex.Message + "\n请手动打开 QLock。", "QLock 更新", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            Shutdown(0);
         }
 
         void StartAutoUnlock()
@@ -336,7 +451,7 @@ namespace QLock
                 settings.Win.Activate();
                 return;
             }
-            SettingsWindow w = new SettingsWindow(Config, firstRun, OnConfigSaved);
+            SettingsWindow w = new SettingsWindow(Config, firstRun, OnConfigSaved, delegate { CheckForUpdates(true); });
             w.Win.Closed += delegate { settings = null; };
             settings = w;
             w.Win.Show();

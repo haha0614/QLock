@@ -31,6 +31,9 @@ namespace QLock
         [DataMember] public bool ShowClock = true;
         [DataMember] public string Subtitle = "输入密码解锁";
 
+        [DataMember] public long LastUpdateCheckTicks = 0;
+        [DataMember] public string SkippedVersion = "";
+
         [OnDeserializing]
         void ApplyDefaults(StreamingContext ctx)
         {
@@ -52,6 +55,8 @@ namespace QLock
             BackgroundSnapshot = false;
             ShowClock = true;
             Subtitle = "输入密码解锁";
+            LastUpdateCheckTicks = 0;
+            SkippedVersion = "";
         }
 
         public bool HasPassword { get { return !string.IsNullOrEmpty(PasswordHash) && !string.IsNullOrEmpty(PasswordSalt); } }

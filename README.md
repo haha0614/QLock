@@ -3,7 +3,7 @@
 Windows 上的一个锁屏小工具。锁定之后桌面变成一张模糊的截图，中间是时钟和密码框，输对密码就回桌面。
 密码是 QLock 自己的，和 Windows 账户没有关系，所以不会把 Windows 账户锁住、也不用记两个密码。
 
-版本 0.1.0，MIT 协议，未签名。
+版本 0.2.0，MIT 协议，未签名。
 
 ## 截图
 
@@ -22,7 +22,11 @@ Windows 上的一个锁屏小工具。锁定之后桌面变成一张模糊的截
 要提权就手动右键以管理员身份运行，别让它跟着登录一起走。
 
 不放心可以先校验：`Get-FileHash QLock.exe -Algorithm SHA256`，和 `SHA256SUMS.txt` 对一下。
-升级就是退出程序、覆盖 exe，配置在用户目录里不受影响。
+
+程序每天第一次启动时会去 Releases 看一眼有没有新版本，有的话弹一个窗口写清楚更新了什么，
+你点「下载并升级」才会下载，校验过 SHA256 之后原地替换 exe 并自己重启，配置和密码都保留。
+不想再被这个版本提醒就点「跳过这个版本」。设置窗最下面也能手动查。
+下载的文件放在 `%TEMP%\QLock-update`，替换前的旧 exe 会临时改名成 `QLock.exe.old`，下次启动时删掉。
 
 系统要求：Windows 10 1903 或更高、Windows 11，自带 .NET Framework 4.8 就能跑。
 
@@ -51,6 +55,7 @@ Windows 上的一个锁屏小工具。锁定之后桌面变成一张模糊的截
 | 外观 | 显示时钟、用截图做模糊背景（默认关）、提示文字 |
 | 加固 | 拦截系统热键 |
 | 开机自启 | 登录时自动启动、以管理员身份启动（和启动即锁的搭配见上面「安装」） |
+| 关于与更新 | 当前版本、手动检查更新 |
 
 改完点保存，点关闭则丢弃没保存的修改。
 
@@ -62,11 +67,13 @@ Windows 上的一个锁屏小工具。锁定之后桌面变成一张模糊的截
 | `--lock` | 立刻锁定，已经有实例在跑就把指令转过去 |
 | `--settings` | 打开设置窗 |
 | `--demo` | 演示锁屏 10 秒后退出，不需要密码 |
+| `--check-update` | 立刻检查一次更新，不看「每天一次」的限制 |
 
 ## 文件在哪
 
 - 配置：`%APPDATA%\QLock\config.json`，只有密码 hash 和 salt，没有明文
 - 日志：`%LOCALAPPDATA%\QLock\qlock.log`，超过 512 KB 自动重建
+- 更新下载：`%TEMP%\QLock-update`，装完就删
 
 ## 卸载
 
@@ -113,6 +120,7 @@ Windows 不允许给已经跑起来的进程提权。不在管理员组的账号
 语言级别是 C# 5，用不了 `?.`、`nameof` 和字符串插值。
 
 源码大致这样分：`Program.cs` 是外壳、单实例和命令行，`LockController.cs` 是状态机和键盘钩子，
+`Updater.cs` 查 Release、校验并替换 exe，`UpdateWindow.cs` 是那个更新窗口，
 `LockWindow.cs` 是每块屏一个的全屏窗口，`Native.cs` 放 P/Invoke，`Auth.cs` 是 PBKDF2 和恢复码，
 `AppConfig.cs` 是配置和原子写，剩下 `Ui.cs`、`SettingsWindow.cs`、`TrayIcon.cs`、`Snapshot.cs`、`Log.cs`。
 

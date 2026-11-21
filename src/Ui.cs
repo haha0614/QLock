@@ -42,6 +42,11 @@ namespace QLock
 
         public static void StyleInput(Control c)
         {
+            StyleInput(c, false);
+        }
+
+        public static void StyleInput(Control c, bool multiline)
+        {
             c.FontFamily = Font;
             c.FontSize = 14;
             c.Foreground = Brushes.White;
@@ -58,15 +63,15 @@ namespace QLock
             border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Control.BorderThicknessProperty));
             FrameworkElementFactory host = new FrameworkElementFactory(typeof(ScrollViewer));
             host.Name = "PART_ContentHost";
-            host.SetValue(ScrollViewer.VerticalAlignmentProperty, VerticalAlignment.Center);
+            host.SetValue(ScrollViewer.VerticalAlignmentProperty, multiline ? VerticalAlignment.Stretch : VerticalAlignment.Center);
             host.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Hidden);
-            host.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Hidden);
-            host.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 0, 10, 0));
+            host.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, multiline ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden);
+            host.SetValue(FrameworkElement.MarginProperty, multiline ? new Thickness(8, 6, 8, 6) : new Thickness(10, 0, 10, 0));
             host.SetValue(UIElement.FocusableProperty, false);
             border.AppendChild(host);
             template.VisualTree = border;
             c.Template = template;
-            c.Height = 34;
+            if (!multiline) c.Height = 34;
         }
 
         public static Button Button(string text, bool primary)

@@ -66,8 +66,18 @@ namespace QLock
             Check(!partial.BackgroundSnapshot && partial.ShowClock && partial.CustomHotkeyEnabled, "partial config keeps appearance defaults");
             Check(partial.PasswordIterations == Auth.DefaultIterations, "partial config keeps iteration count");
             Check(partial.Autostart == "none", "partial config keeps autostart default");
+            Check(partial.LastUpdateCheckTicks == 0 && partial.SkippedVersion == "", "partial config keeps update defaults");
             Directory.Delete(dir, true);
             ConfigStore.SetOverrideDir(null);
+
+            Version current = new Version(0, 1, 0, 0);
+            Check(Updater.IsNewer("v0.2.0", current), "version: v0.2.0 is newer than 0.1.0");
+            Check(Updater.IsNewer("0.1.1", current), "version: 0.1.1 is newer than 0.1.0");
+            Check(!Updater.IsNewer("v0.1.0", current), "version: same version is not newer");
+            Check(!Updater.IsNewer("v0.0.9", current), "version: older version is not newer");
+            Check(!Updater.IsNewer("nightly", current), "version: unparsable tag is not newer");
+            Version parsed;
+            Check(Updater.TryParseTag("v1.2.3", out parsed) && parsed.Major == 1 && parsed.Minor == 2 && parsed.Build == 3, "version: tag parsing");
 
             Console.WriteLine(failures == 0 ? "== ALL PASS ==" : "== " + failures + " FAILED ==");
             return failures == 0 ? 0 : 1;
