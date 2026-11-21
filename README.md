@@ -153,7 +153,7 @@ QLock 只负责"QLock 自己的锁屏"。系统的锁屏一旦触发，仍然会
 
 - 版本号唯一来源是 `src\AssemblyInfo.cs` 的 `AssemblyVersion`（同时决定 zip 文件名）
 - `build.cmd` → `bin\QLock.exe`（`/win32manifest` + `/win32icon`）；`pack.cmd` → `dist\QLock-<版本>.zip`（exe + README + LICENSE）
-- 图标 `src\QLock.ico` 由 `tools\makeicon.ps1` 生成（16/24/32/48/64/128，经典 DIB 格式，任何 Windows 版本与 csc 都认）
+- 图标 `src\QLock.ico` 由 `tools\makeicon.ps1` 生成：QTools 品牌兔子（Lucide `rabbit`，ISC 许可，路径原样）+ 透明底 + 品牌蓝 `#409EFF` 线条；16/24/32/48/64/128 六档，经典 DIB 格式，任何 Windows 版本与 csc 都认；≤24px 自动去掉眼点并加粗线条，否则糊成一团（`-Stroke` 可改线条颜色，`-PreviewDir` 出预览 PNG）
 - CI：`.github\workflows\build.yml` 在 `windows-latest` 上跑同一套 `build.cmd` / `test.cmd`（测试失败会重试 3 次，避开杀软对新编译产物的短暂拦截），再 `tools\pack.ps1` 出 zip 作为构建产物
 - **未签名**：没有代码签名证书时 SmartScreen 会提示"未知发布者"。发布前建议在 Release 说明里重申"软锁不是安全边界、会写 HKCU 启动项、不写任何策略注册表"
 - 若以后要发 .NET 8 自包含版本（给没有 4.8 的机器），需要另起一条构建链；当前只做 .NET Framework 单文件
@@ -169,6 +169,6 @@ QLock 只负责"QLock 自己的锁屏"。系统的锁屏一旦触发，仍然会
   - `Native.cs` P/Invoke（SetWindowPos / RaiseTopmost / ForceForeground / 钩子 / 空闲时间）
   - `Autostart.cs` 开机自启与加固策略；`Auth.cs` PBKDF2 与恢复码；`AppConfig.cs` 配置模型 + JSON 存取（`ConfigStore` 就在这个文件里，原子写）
   - `Ui.cs` 深色 UI 助手（扁平按钮、输入框模板、卡片）
-- `AssemblyInfo.cs` 版本/产品/版权信息；`QLock.ico` 应用图标（`tools\makeicon.ps1` 生成）
+- `AssemblyInfo.cs` 版本/产品/版权信息；`QLock.ico` 应用图标（`tools\makeicon.ps1` 生成，托盘图标直接取 exe 里同一个图标，两者不会走样）
 - `build.cmd`（构建）、`test.cmd`（构建 + 跑测试）、`pack.cmd`（构建 + 打包）、`tools\pack.ps1`（打包实现）
 - `tools\` 下是验证脚本（截图 + 真机自动化测试），`_shots\` 是验证截图

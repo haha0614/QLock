@@ -7,6 +7,7 @@ namespace QLock
     public class TrayIcon : IDisposable
     {
         NotifyIcon icon;
+        Icon appIcon;
         IntPtr iconHandle;
         readonly Action onLock;
         readonly Action onSettings;
@@ -34,6 +35,17 @@ namespace QLock
 
         Icon BuildIcon()
         {
+            // 优先用 exe 的应用图标（与资源管理器/任务栏一致），失败才退回自绘的锁
+            try
+            {
+                appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                if (appIcon != null) return appIcon;
+            }
+            catch (Exception ex)
+            {
+                Log.Write("tray icon from exe failed: " + ex.Message);
+            }
+
             using (Bitmap bmp = new Bitmap(32, 32))
             {
                 using (Graphics g = Graphics.FromImage(bmp))
@@ -84,6 +96,11 @@ namespace QLock
                 icon.Visible = false;
                 icon.Dispose();
                 icon = null;
+            }
+            if (appIcon != null)
+            {
+                appIcon.Dispose();
+                appIcon = null;
             }
             if (iconHandle != IntPtr.Zero)
             {
