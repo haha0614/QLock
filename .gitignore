@@ -1,0 +1,6 @@
+bin/
+dist/
+_shots/
+obj/
+*.user
+*.log

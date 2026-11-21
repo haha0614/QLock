@@ -1,0 +1,50 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        shell: pwsh
+        run: |
+          (Get-Item 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe').VersionInfo.FileVersion
+
+      - name: Build
+        shell: cmd
+        run: build.cmd
+
+      - name: Test
+        shell: pwsh
+        run: |
+          # A freshly written exe can be blocked for a few seconds by AV heuristics; retry instead of failing.
+          for ($i = 1; $i -le 3; $i++) {
+            cmd /c test.cmd
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "test run $i failed with exit $LASTEXITCODE, retrying in 20s"
+            Start-Sleep -Seconds 20
+          }
+          exit 1
+
+      - name: Pack
+        shell: pwsh
+        run: ./tools/pack.ps1
+
+      - name: Version info
+        shell: pwsh
+        run: (Get-Item bin/QLock.exe).VersionInfo | Format-List FileVersion, ProductName, LegalCopyright
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QLock
+          path: |
+            dist/*.zip
+            bin/QLock.exe
+          if-no-files-found: error
