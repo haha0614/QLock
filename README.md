@@ -10,6 +10,12 @@
 
 ---
 
+## 截图
+
+<img src="docs/screenshot-lock.png" width="820" alt="锁屏界面">
+
+<img src="docs/screenshot-settings.png" width="380" alt="设置窗">
+
 ## 快速开始
 
 1. `build.cmd` → 生成 `bin\QLock.exe`（单文件，无需安装，.NET Framework 4.x）
@@ -26,7 +32,7 @@
 
 ## 安装
 
-1. 从 Release 下载 `QLock-<版本>.zip`，解压到一个**不会被随手清掉**的目录（不要留在下载目录：开机自启指向的就是这个路径）
+1. 从 Release 下载 `QLock-<版本>.zip`（或只下裸 `QLock.exe`），解压/放到一个**不会被随手清掉**的目录（不要留在下载目录：开机自启指向的就是这个路径）；想校验就用 `Get-FileHash QLock.exe -Algorithm SHA256` 对照 `SHA256SUMS.txt`
 2. 双击 `QLock.exe`：首次运行没有密码，会自动打开设置窗 → 设置解锁密码 → 保存
 3. 想开机自启：设置里勾「登录时自动启动」再保存（写入当前用户 Run 项，不需要管理员）
 
@@ -138,7 +144,7 @@ QLock 只负责"QLock 自己的锁屏"。系统的锁屏一旦触发，仍然会
 - **"禁用任务管理器"不是靠策略实现的**：见上一节。`HKCU\...\Policies` 在多数企业机器上不可写（本机实测：owner=SYSTEM，当前用户只有 ReadKey），而写 `DisableTaskMgr` 又会让火绒拒绝启动本程序，所以程序里完全没有这段代码。
 - **Win+L 只有 QLock 在跑时才被接管**：程序未运行时按 Win+L 仍是系统锁屏。
 - **多显示器**：每块屏幕都会盖一层，只有主屏可交互，其余屏只显示背景与时钟（防误触）。
-  锁屏期间插拔显示器、改分辨率、休眠唤醒都会先比较屏幕布局：布局没变只重新置顶并`locked`保持为真（不解锁），布局变了才重建，而且是**先显示新覆盖层再关旧窗口**。实测两条路径都没有露出桌面（`_shots\r1_before.png` / `r2_after.png`）。
+  锁屏期间插拔显示器、改分辨率、休眠唤醒都会先比较屏幕布局：布局没变只重新置顶并`locked`保持为真（不解锁），布局变了才重建，而且是**先显示新覆盖层再关旧窗口**。实测两条路径都没有露出桌面。
 - **杀软误报（重要，已定位）**：火绒曾把构建产物判为 `HEUR:Trojan/Distool.a` 并删除。用 `csc` 二分编译复现后结论明确：
   - 单独写 Run 启动项 → 正常；单独 `schtasks /Create /RL HIGHEST` → 正常；单独写 `DisableTaskMgr` → 正常
   - **「写 Run 自启」与「写 DisableTaskMgr」出现在同一个 exe 里 → 启动即被静默杀掉**（退出码 -1、连 `Main` 第一行输出都没有）；三者齐备同样被杀
@@ -151,11 +157,13 @@ QLock 只负责"QLock 自己的锁屏"。系统的锁屏一旦触发，仍然会
 
 ## 发布（维护者）
 
-- 版本号唯一来源是 `src\AssemblyInfo.cs` 的 `AssemblyVersion`（同时决定 zip 文件名）
-- `build.cmd` → `bin\QLock.exe`（`/win32manifest` + `/win32icon`）；`pack.cmd` → `dist\QLock-<版本>.zip`（exe + README + LICENSE）
+- 版本号唯一来源是 `src\AssemblyInfo.cs` 的 `AssemblyVersion`；tag 用 `v0.1.0` 形式，`release.yml` 靠它触发
+- `build.cmd` → `bin\QLock.exe`（`/win32manifest` + `/win32icon`）；`pack.cmd` → `dist\QLock-<版本>.zip`（exe + README + LICENSE）、`dist\QLock.exe`、`dist\SHA256SUMS.txt`
+- Release 附件同时给 zip 和裸 exe：zip 保证 MIT 许可与 README 随二进制一起分发（MIT 要求分发时附带版权与许可声明），裸 exe 方便只想双击运行的人；`SHA256SUMS.txt` 供下载者校验
 - 图标 `src\QLock.ico` 由 `tools\makeicon.ps1` 生成：QTools 品牌兔子（Lucide `rabbit`，ISC 许可，路径原样）+ 透明底 + 品牌蓝 `#409EFF` 线条；16/24/32/48/64/128 六档，经典 DIB 格式，任何 Windows 版本与 csc 都认；≤24px 自动去掉眼点并加粗线条，否则糊成一团（`-Stroke` 可改线条颜色，`-PreviewDir` 出预览 PNG）
-- CI：`.github\workflows\build.yml` 在 `windows-latest` 上跑同一套 `build.cmd` / `test.cmd`（测试失败会重试 3 次，避开杀软对新编译产物的短暂拦截），再 `tools\pack.ps1` 出 zip 作为构建产物
-- **未签名**：没有代码签名证书时 SmartScreen 会提示"未知发布者"。发布前建议在 Release 说明里重申"软锁不是安全边界、会写 HKCU 启动项、不写任何策略注册表"
+- CI 两条：`build.yml`（push/PR 上构建 + 测试 + 上传 artifact）、`release.yml`（推 tag 时构建、测试、打包并创建 Release，上传 zip / exe / SHA256SUMS；测试失败会重试 3 次，避开杀软对新编译产物的短暂拦截）
+- 元数据：`AssemblyCompany` = `Qing`、`AssemblyCopyright` = `Copyright (c) 2026 Qing`。注意文件属性里的「公司/版权」和 UAC、SmartScreen 上显示的「发布者」**不是一回事**——后者只来自 Authenticode 签名证书的主体，未签名就一律显示"未知发布者"
+- 签名（可选）：开源项目可以申请 SignPath.io 的免费签名，或买 Certum Open Source Code Signing 一类证书；证书主体要能通过身份核验（`Qing` 这种通用网名通常会被要求换成实名或商标）；签名后 SmartScreen 声誉仍要重新累积，换证书等于归零
 - 若以后要发 .NET 8 自包含版本（给没有 4.8 的机器），需要另起一条构建链；当前只做 .NET Framework 单文件
 
 ## 开发

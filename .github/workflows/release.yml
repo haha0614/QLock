@@ -1,0 +1,56 @@
+name: release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        shell: cmd
+        run: build.cmd
+
+      - name: Test
+        shell: pwsh
+        run: |
+          # A freshly written exe can be blocked for a few seconds by AV heuristics; retry instead of failing.
+          for ($i = 1; $i -le 3; $i++) {
+            cmd /c test.cmd
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "test run $i failed with exit $LASTEXITCODE, retrying in 20s"
+            Start-Sleep -Seconds 20
+          }
+          exit 1
+
+      - name: Pack
+        shell: pwsh
+        run: ./tools/pack.ps1
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+            bin/QLock.exe
+          body: |
+            ## 下载哪个
+            
+            - `QLock-<版本>.zip`：exe + README + LICENSE，MIT 许可要求随二进制分发时附带许可声明，推荐
+            - `QLock.exe`：单文件，直接双击运行（不需要管理员权限）
+            - `SHA256SUMS.txt`：校验用，`Get-FileHash QLock.exe -Algorithm SHA256` 对照即可
+
+            ## 先读这些再决定要不要用
+
+            - **这是软锁，不是安全边界**：`Ctrl+Alt+Del` 可以绕过（安全界面里结束进程或 `taskkill /f /im QLock.exe`）
+            - 会用低级键盘钩子拦截 Win / Alt+Tab 等热键，会写**当前用户**的 Run 启动项（可选）；**不写任何策略注册表**
+            - **未签名**：SmartScreen 与 UAC 会显示“未知发布者”，这不代表文件危险，但请自行校验哈希
+            - 想真正取代系统锁屏，还需要在 Windows 侧关掉登录/屏保/睡眠唤醒的锁屏触发点，见 README「必须配合的系统设置」
