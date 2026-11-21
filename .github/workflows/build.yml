@@ -24,7 +24,7 @@ jobs:
       - name: Test
         shell: pwsh
         run: |
-          # A freshly written exe can be blocked for a few seconds by AV heuristics; retry instead of failing.
+          # 新编译的 exe 偶尔被杀软拦几秒，重试几次再判失败。
           for ($i = 1; $i -le 3; $i++) {
             cmd /c test.cmd
             if ($LASTEXITCODE -eq 0) { exit 0 }
@@ -45,6 +45,6 @@ jobs:
         with:
           name: QLock
           path: |
-            dist/*.zip
-            bin/QLock.exe
+            dist/QLock.exe
+            dist/SHA256SUMS.txt
           if-no-files-found: error
