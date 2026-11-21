@@ -197,7 +197,7 @@ namespace QLock
             cbElevated = Ui.Check(cfg.RunElevated, "以管理员身份启动（每次启动弹一次 UAC）", 6);
             start.Children.Add(cbElevated);
 
-            TextBlock elevHint = Ui.Text("管理员模式下普通权限无法结束本进程（任务管理器会提示拒绝访问）；取消 UAC 授权时以普通权限继续运行。", 11.5, Ui.TextSecondary, FontWeights.Normal);
+            TextBlock elevHint = Ui.Text("管理员模式下普通权限无法结束本进程。取消 UAC 授权时以普通权限继续运行。和「登录时自动启动 + 程序启动后立即锁定」一起用，登录后会先等 UAC 确认，这段时间桌面是露着的。", 11.5, Ui.TextSecondary, FontWeights.Normal);
             elevHint.TextWrapping = TextWrapping.Wrap;
             elevHint.Margin = new Thickness(22, 4, 0, 2);
             start.Children.Add(elevHint);
