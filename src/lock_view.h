@@ -11,6 +11,10 @@ class View {
 public:
     LockTheme theme;
     std::wstring password;
+    // 忘了密码时切到恢复码面板，两个输入框各自留一份文字。
+    std::wstring recovery;
+    bool recovering = false;
+    bool inputEnabled = true;
     std::wstring message;
     bool error = false;
     bool caretOn = true;
@@ -26,6 +30,11 @@ public:
     void Draw(ID2D1DeviceContext* dc, float w, float h);
 
     bool Ready() const { return clockFmt != nullptr; }
+
+    // 上一次画出来的两处链接位置（屏幕坐标），给点击命中用。
+    D2D1_RECT_F forgotRect = {};
+    D2D1_RECT_F backRect = {};
+    D2D1_RECT_F buttonRect = {};
 
     // 勾了「用屏幕截图做模糊背景」时，锁之前抓下来的那块屏；画完不负责释放。
     void SetSnapshot(HBITMAP bmp);
@@ -44,9 +53,13 @@ private:
     IDWriteTextFormat* btnFmt = nullptr;
     IDWriteTextFormat* linkFmt = nullptr;
     IDWriteTextFormat* msgFmt = nullptr;
+    IDWriteTextFormat* hintFmt = nullptr;
 
     void ReleaseFormats();
     void CreateFormats();
+    void DrawField(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const std::wstring& text, const wchar_t* hint,
+                   bool enabled);
+    void DrawButton(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const wchar_t* label);
     void LoadWallpaper(ID2D1DeviceContext* dc);
     float BlurRadius() const;
     void EnsureBlur(ID2D1DeviceContext* dc, float sigma);

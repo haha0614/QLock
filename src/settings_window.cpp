@@ -86,6 +86,7 @@ enum {
     ID_SLIDER_BLUR = 321,
     ID_SLIDER_MASK = 322,
     ID_APPLY_PASSWORD = 330,
+    ID_RECOVERY = 332,
     ID_REVEAL = 331,
     ID_CLOSE = 400,
     ID_EDIT_SUBTITLE = 500,
@@ -129,6 +130,7 @@ public:
 
     std::wstring status;
     bool statusError = false;
+    std::wstring shownCode;   // 刚生成的恢复码，只在本次打开窗口时显示
     UINT_PTR saveTimer = 0;
 
     static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -232,6 +234,24 @@ public:
             statusError = true;
         }
         Invalidate();
+    }
+
+    static void CopyText(const std::wstring& text) {
+        if (!OpenClipboard(nullptr)) return;
+        EmptyClipboard();
+        size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+        HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+        if (mem) {
+            void* dst = GlobalLock(mem);
+            if (dst) {
+                memcpy(dst, text.c_str(), bytes);
+                GlobalUnlock(mem);
+                SetClipboardData(CF_UNICODETEXT, mem);
+            } else {
+                GlobalFree(mem);
+            }
+        }
+        CloseClipboard();
     }
 
     void SetStatus(const std::wstring& text, bool error) {
@@ -523,13 +543,22 @@ void Settings::LayoutUnlock(float left, float right, float top, float bottom) {
     y += RowH;
     RowLine(y, left, right);
     gfx::Text(dc, fBody, L"恢复码", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
-    gfx::Text(dc, fSmall, L"还没搬过来", D2D1::RectF(left + 200, y, right, y + RowH), Color(kTextMuted));
+    {
+        Rect make{ right - 132, y + 12, right, y + 12 + ControlH };
+        std::wstring note = !shownCode.empty() ? (shownCode + L"（已复制，用一次就失效）")
+                           : app::HasRecovery() ? L"已设置，用一次就失效"
+                                                : L"还没设置";
+        gfx::Text(dc, fSmall, note, D2D1::RectF(left + 200, y, make.l - 16, y + RowH),
+                  Color(shownCode.empty() ? kTextMuted : kText));
+        Button(make, L"生成新的恢复码", false, hot == ID_RECOVERY);
+        Widget r; r.id = ID_RECOVERY; r.kind = K_BTN; r.rect = make; widgets.push_back(r);
+    }
     y += RowH;
     RowLine(y, left, right);
     gfx::Text(dc, fBody, L"Windows 账户", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
     gfx::Text(dc, fSmall, L"QLock 不碰系统账户，只盖一层自己的锁屏", D2D1::RectF(left + 200, y, right, y + RowH), Color(kTextMuted));
     y += RowH + 8;
-    gfx::Text(dc, fSmall, L"改完点「设置」，密码按 PBKDF2-SHA256 存，另存一份 DPAPI 加密的明文只给这里回显。",
+    gfx::Text(dc, fSmall, L"改完点「设置」，密码按 PBKDF2-SHA256 存，另存一份 DPAPI 加密的明文只给这里回显；恢复码同样只存 hash，用过一次就清掉。",
               D2D1::RectF(left, y, right, y + 40), Color(kTextMuted));
 }
 
@@ -693,6 +722,16 @@ void Settings::Apply(int id) {
     if (id == ID_REVEAL) {
         reveal = !reveal;
         Invalidate();
+        return;
+    }
+    if (id == ID_RECOVERY) {
+        std::wstring code = app::NewRecoveryCode();
+        if (code.empty()) { SetStatus(L"生成恢复码失败", true); return; }
+        app::SetRecovery(code);
+        shownCode = code;
+        CopyText(code);
+        SetStatus(L"恢复码已生成并复制到剪贴板，记下来——用一次就换", false);
+        InvalidateRect(hwnd, nullptr, FALSE);
         return;
     }
     if (id == ID_APPLY_PASSWORD) {

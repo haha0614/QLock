@@ -106,6 +106,20 @@ int main(int, char**) {
     Check(app::StoredPassword() == L"p@ss 密码", L"stored password decrypts as utf-8");
     Check(app::VerifyPassword(L"p@ss 密码"), L"password written by SetPassword verifies");
 
+    Check(!app::HasRecovery(), L"no recovery code by default");
+    std::wstring code = app::NewRecoveryCode();
+    Check(code.size() == 11 && code[5] == L'-', L"recovery code looks like XXXXX-XXXXX");
+    app::SetRecovery(code);
+    Check(app::HasRecovery(), L"recovery code saved");
+    Check(app::VerifyRecovery(code), L"recovery code verifies");
+    Check(app::VerifyRecovery(L" " + code + L" "), L"recovery code ignores surrounding spaces");
+    std::wstring lower = code;
+    for (size_t i = 0; i < lower.size(); ++i) lower[i] = (wchar_t)towlower(lower[i]);
+    Check(app::VerifyRecovery(lower), L"recovery code ignores case and dashes");
+    Check(!app::VerifyRecovery(L"AAAAA-AAAAA"), L"wrong recovery code rejected");
+    app::ClearRecovery();
+    Check(!app::HasRecovery() && !app::VerifyRecovery(code), L"cleared recovery code stops working");
+
     Check(app::SaveConfig(), L"save config");
     Check(Exists(app::ConfigPath()), L"config file exists");
 

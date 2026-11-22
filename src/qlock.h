@@ -74,6 +74,13 @@ bool HasPassword();
 bool VerifyPassword(const std::wstring& password);
 void SetPassword(const std::wstring& password);   // 写 Hash/Salt/Cipher 并立即保存
 std::wstring StoredPassword();                    // 解出 DPAPI 那份明文，只给设置页回显
+// 恢复码：10 位（形如 XXXXX-XXXXX），和密码一样走 PBKDF2-SHA256；用一次就作废。
+std::wstring NewRecoveryCode();
+void SetRecovery(const std::wstring& code);     // 写 Hash/Salt 并立即保存
+void ClearRecovery();
+bool HasRecovery();
+bool VerifyRecovery(const std::wstring& code);
+
 std::wstring ClockFontName();    // 时钟字体没开或没挑过就回落界面字体
 std::wstring UiFontName();
 

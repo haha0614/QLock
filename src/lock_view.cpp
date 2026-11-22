@@ -38,6 +38,7 @@ void View::ReleaseFormats() {
     Release(&editFmt);
     Release(&btnFmt);
     Release(&linkFmt);
+    Release(&hintFmt);
     Release(&msgFmt);
 }
 
@@ -53,6 +54,8 @@ void View::CreateFormats() {
     btnFmt = gfx::Format(ui, (float)theme.Button.Size, 400, DWRITE_TEXT_ALIGNMENT_CENTER);
     linkFmt = gfx::Format(ui, (float)theme.Link.Size, 400, DWRITE_TEXT_ALIGNMENT_CENTER);
     msgFmt = gfx::Format(ui, 12.0f, 400, DWRITE_TEXT_ALIGNMENT_CENTER);
+    float hintSize = (float)(std::max)(10, (int)theme.Input.Size - 3);
+    hintFmt = gfx::Format(ui, hintSize, 400, DWRITE_TEXT_ALIGNMENT_CENTER);
 }
 
 void View::DropDeviceResources() {
@@ -130,9 +133,6 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
     const bool showClock = app::cfg.ShowClock && theme.Clock.Show;
     const bool showSub = app::cfg.ShowSubtitle && theme.Subtitle.Show;
     const bool inlineRow = theme.Inline();
-    const bool underline = _wcsicmp(theme.Input.Kind.c_str(), L"underline") == 0;
-    const bool outlineBtn = _wcsicmp(theme.Button.Kind.c_str(), L"outline") == 0;
-    const bool flatBtn = _wcsicmp(theme.Button.Kind.c_str(), L"text") == 0;
 
     float colW = card ? (float)theme.Card.Width
                       : (theme.Input.Width > 0 ? (float)theme.Input.Width : 340.0f);
@@ -150,11 +150,13 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
     float linkH = (float)theme.Link.Size * 1.7f;
     float linkGap = (float)theme.Link.Gap;
     float msgH = message.empty() ? 0.0f : 28.0f;
+    float hintH = recovering ? (float)(std::max)(10, (int)theme.Input.Size - 3) * 1.5f + 16.0f : 0.0f;
 
     float btnW = inlineRow ? (theme.Button.Width > 0 ? (float)theme.Button.Width : 96.0f) : innerW;
     float rowH = inlineRow ? inputH : 0.0f;
 
-    float bodyH = brandH + subH + (inlineRow ? rowH : inputH + btnGap + btnH) + linkGap + linkH + msgH;
+    float fieldH = recovering ? hintH + inputH + btnGap + btnH : (inlineRow ? rowH : inputH + btnGap + btnH);
+    float bodyH = brandH + subH + fieldH + linkGap + linkH + msgH;
     float cardH = card ? bodyH + (float)theme.Card.PadV * 2 : bodyH;
     float total = clockH + dateH + dateGap + cardH;
     float left = (w - colW) / 2;
@@ -236,66 +238,47 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
 
     float inputW = inlineRow ? innerW - btnW - 8.0f : innerW;
     if (inputW < 80) inputW = 80;
-    D2D1_RECT_F inputBox = D2D1::RectF(left, top, left + inputW, top + inputH);
-    float inputRadius = gfx::Radius((float)theme.Input.Radius, inputH);
-    if (underline) {
-        gfx::FillRect(dc, D2D1::RectF(inputBox.left, inputBox.bottom - 1.0f, inputBox.right, inputBox.bottom),
-                      themes::Color(theme.Input.Border, gfx::Color(0xFF2A2F38)));
-    } else {
-        D2D1_ROUNDED_RECT r = D2D1::RoundedRect(inputBox, inputRadius, inputRadius);
-        gfx::FillRound(dc, r, themes::Color(theme.Input.Bg, gfx::Color(0xFF1E2129)));
-        gfx::StrokeRound(dc, r, themes::Color(theme.Input.Border, gfx::Color(0xFF4A4F5A)), 1.0f);
-    }
+    forgotRect = D2D1::RectF(0, 0, 0, 0);
+    backRect = D2D1::RectF(0, 0, 0, 0);
+    buttonRect = D2D1::RectF(0, 0, 0, 0);
+    D2D1_RECT_F btnBox = D2D1::RectF(0, 0, 0, 0);
 
-    float inset = underline ? 0.0f : 13.0f;
-    float textLeft = inputBox.left + inset;
-    float textW = inputBox.right - textLeft - inset;
-    if (password.empty()) {
-        gfx::Text(dc, editFmt, L"锁屏密码", D2D1::RectF(textLeft, inputBox.top, textLeft + textW, inputBox.bottom),
+    if (recovering) {
+        gfx::Text(dc, hintFmt, L"输入 10 位恢复码（形如 XXXXX-XXXXX）",
+                  D2D1::RectF(left, top, left + innerW, top + hintH - 8.0f),
                   themes::Color(theme.Input.Hint, gfx::Color(0xFF7B8391)));
-    } else {
-        ID2D1SolidColorBrush* dot = nullptr;
-        if (SUCCEEDED(dc->CreateSolidColorBrush(themes::Color(theme.Input.Fg, gfx::Color(0xFFFFFFFF)), &dot))) {
-            float cy = (inputBox.top + inputBox.bottom) / 2;
-            float step = (float)theme.Input.Size * 0.85f;
-            float r = (std::max)(3.0f, (float)theme.Input.Size * 0.22f);
-            for (size_t i = 0; i < password.size(); ++i) {
-                float cx = textLeft + r + step * (float)i;
-                dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), dot);
-            }
-            if (caretOn) {
-                float cx = textLeft + step * (float)password.size();
-                dc->FillRectangle(D2D1::RectF(cx, cy - 9.0f, cx + 1.5f, cy + 9.0f), dot);
-            }
-            dot->Release();
-        }
-    }
-
-    float r = gfx::Radius((float)theme.Button.Radius, btnH);
-    D2D1_RECT_F btnBox;
-    if (inlineRow) {
-        float bx = left + inputW + 8.0f;
-        float by = top + (inputH - btnH) / 2;
-        btnBox = D2D1::RectF(bx, by, bx + btnW, by + btnH);
-        top += rowH;
-    } else {
+        top += hintH;
+        DrawField(dc, D2D1::RectF(left, top, left + inputW, top + inputH), recovery, L"恢复码", inputEnabled);
         top += inputH + btnGap;
         btnBox = D2D1::RectF(left, top, left + btnW, top + btnH);
         top += btnH;
+        DrawButton(dc, btnBox, L"用恢复码解锁");
+        buttonRect = btnBox;
+        top += linkGap;
+        backRect = D2D1::RectF(left, top, left + innerW, top + linkH);
+        gfx::Text(dc, linkFmt, L"返回密码输入", backRect, themes::Color(theme.Link.Color, gfx::Color(0xFF8CB4F0)));
+        top += linkH;
+    } else {
+        D2D1_RECT_F inputBox = D2D1::RectF(left, top, left + inputW, top + inputH);
+        DrawField(dc, inputBox, password, L"锁屏密码", inputEnabled);
+        if (inlineRow) {
+            float bx = left + inputW + 8.0f;
+            float by = top + (inputH - btnH) / 2;
+            btnBox = D2D1::RectF(bx, by, bx + btnW, by + btnH);
+            top += rowH;
+        } else {
+            top += inputH + btnGap;
+            btnBox = D2D1::RectF(left, top, left + btnW, top + btnH);
+            top += btnH;
+        }
+        DrawButton(dc, btnBox, L"解锁");
+        buttonRect = btnBox;
+        top += linkGap;
+        forgotRect = D2D1::RectF(left, top, left + innerW, top + linkH);
+        gfx::Text(dc, linkFmt, L"忘记密码？用恢复码解锁", forgotRect,
+                  themes::Color(theme.Link.Color, gfx::Color(0xFF8CB4F0)));
+        top += linkH;
     }
-    if (!flatBtn) {
-        gfx::FillRound(dc, D2D1::RoundedRect(btnBox, r, r), themes::Color(theme.Button.Bg, gfx::Color(0xFF3A76E8)));
-    }
-    if (outlineBtn) {
-        gfx::StrokeRound(dc, D2D1::RoundedRect(btnBox, r, r),
-                         themes::Color(theme.Button.Border, gfx::Color(0x50FFFFFF)), 1.0f);
-    }
-    gfx::Text(dc, btnFmt, L"解锁", btnBox, themes::Color(theme.Button.Fg, gfx::Color(0xFFFFFFFF)));
-
-    top += linkGap;
-    gfx::Text(dc, linkFmt, L"忘记密码？用恢复码解锁", D2D1::RectF(left, top, left + innerW, top + linkH),
-              themes::Color(theme.Link.Color, gfx::Color(0xFF8CB4F0)));
-    top += linkH;
 
     if (!message.empty()) {
         gfx::Text(dc, msgFmt, message, D2D1::RectF(left, top + 10.0f, left + innerW, top + 10.0f + 18.0f),
@@ -303,6 +286,61 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
     }
 
     dc->SetTransform(&saved);
+}
+
+void View::DrawField(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const std::wstring& text, const wchar_t* hint,
+                     bool enabled) {
+    const bool underline = _wcsicmp(theme.Input.Kind.c_str(), L"underline") == 0;
+    if (underline) {
+        gfx::FillRect(dc, D2D1::RectF(box.left, box.bottom - 1.0f, box.right, box.bottom),
+                      themes::Color(theme.Input.Border, gfx::Color(0xFF2A2F38)));
+    } else {
+        float radius = gfx::Radius((float)theme.Input.Radius, box.bottom - box.top);
+        D2D1_ROUNDED_RECT r = D2D1::RoundedRect(box, radius, radius);
+        gfx::FillRound(dc, r, themes::Color(theme.Input.Bg, gfx::Color(0xFF1E2129)));
+        gfx::StrokeRound(dc, r, themes::Color(theme.Input.Border, gfx::Color(0xFF4A4F5A)), 1.0f);
+    }
+
+    float inset = underline ? 0.0f : 13.0f;
+    float textLeft = box.left + inset;
+    float textW = box.right - textLeft - inset;
+    if (text.empty()) {
+        gfx::Text(dc, editFmt, hint, D2D1::RectF(textLeft, box.top, textLeft + textW, box.bottom),
+                  themes::Color(theme.Input.Hint, gfx::Color(0xFF7B8391)));
+        return;
+    }
+
+    D2D1_COLOR_F fg = themes::Color(theme.Input.Fg, gfx::Color(0xFFFFFFFF));
+    if (!enabled) fg.a = 0.45f;
+    ID2D1SolidColorBrush* dot = nullptr;
+    if (FAILED(dc->CreateSolidColorBrush(fg, &dot))) return;
+    float cy = (box.top + box.bottom) / 2;
+    float step = (float)theme.Input.Size * 0.85f;
+    float r = (std::max)(3.0f, (float)theme.Input.Size * 0.22f);
+    for (size_t i = 0; i < text.size(); ++i) {
+        float cx = textLeft + r + step * (float)i;
+        dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), dot);
+    }
+    if (caretOn && enabled) {
+        float cx = textLeft + step * (float)text.size();
+        dc->FillRectangle(D2D1::RectF(cx, cy - 9.0f, cx + 1.5f, cy + 9.0f), dot);
+    }
+    dot->Release();
+}
+
+void View::DrawButton(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const wchar_t* label) {
+    const bool outline = _wcsicmp(theme.Button.Kind.c_str(), L"outline") == 0;
+    const bool flat = _wcsicmp(theme.Button.Kind.c_str(), L"text") == 0;
+    float radius = gfx::Radius((float)theme.Button.Radius, box.bottom - box.top);
+    if (!flat) {
+        gfx::FillRound(dc, D2D1::RoundedRect(box, radius, radius),
+                       themes::Color(theme.Button.Bg, gfx::Color(0xFF3A76E8)));
+    }
+    if (outline) {
+        gfx::StrokeRound(dc, D2D1::RoundedRect(box, radius, radius),
+                         themes::Color(theme.Button.Border, gfx::Color(0x50FFFFFF)), 1.0f);
+    }
+    gfx::Text(dc, btnFmt, label, box, themes::Color(theme.Button.Fg, gfx::Color(0xFFFFFFFF)));
 }
 
 }  // namespace lockview

@@ -6,10 +6,15 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <windowsx.h>
 
 namespace {
 
 std::vector<class Overlay*> g_windows;
+
+bool Inside(const D2D1_RECT_F& r, POINT p) {
+    return r.right > r.left && p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom;
+}
 const wchar_t* kClass = L"QLockOverlay";
 
 template <class T>
@@ -25,6 +30,7 @@ public:
     ID2D1Bitmap1* target = nullptr;
     lockview::View view;
     float scale = 1.0f;
+    int failures = 0;   // 连续输错的次数，解锁后清零
 
     static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
@@ -147,17 +153,72 @@ public:
     }
 
     void TryUnlock() {
-        if (view.password.empty()) return;
+        if (!view.inputEnabled) return;
+        if (view.password.empty()) {
+            view.message = L"请输入密码";
+            view.error = true;
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return;
+        }
         if (app::VerifyPassword(view.password)) {
             app::Log(L"unlocked");
             app::Unlock();
             return;
         }
-        app::Log(L"unlock failed");
+        app::Log(L"bad password, failures=%d", failures);
         view.password.clear();
         view.message = L"密码不正确";
         view.error = true;
+        if (++failures >= 3) Punish(failures);
         InvalidateRect(hwnd, nullptr, FALSE);
+    }
+
+    void TryRecovery() {
+        if (!view.inputEnabled || view.recovery.empty()) return;
+        if (app::VerifyRecovery(view.recovery)) {
+            app::Log(L"unlocked with recovery code");
+            app::ClearRecovery();   // 恢复码用一次就作废
+            app::SaveConfig();
+            app::Unlock();
+            HWND main = FindWindowExW(HWND_MESSAGE, nullptr, L"QLockMain", nullptr);
+            static const UINT kShowSettings = RegisterWindowMessageW(L"QLock.ShowSettings");
+            if (main) PostMessageW(main, kShowSettings, 0, 0);
+            return;
+        }
+        app::Log(L"bad recovery code, failures=%d", failures);
+        view.recovery.clear();
+        view.message = L"恢复码不正确";
+        view.error = true;
+        if (++failures >= 3) Punish(failures);
+        InvalidateRect(hwnd, nullptr, FALSE);
+    }
+
+    // 连续输错就锁住输入几秒，越错越久，最多 10 秒。
+    void Punish(int count) {
+        int seconds = count - 2;
+        if (seconds > 10) seconds = 10;
+        if (seconds < 1) seconds = 1;
+        std::wstring text = L"过于频繁，请等待 " + std::to_wstring(seconds) + L" 秒";
+        for (size_t i = 0; i < g_windows.size(); ++i) {
+            Overlay* w = g_windows[i];
+            w->view.inputEnabled = false;
+            w->view.password.clear();
+            w->view.recovery.clear();
+            w->view.message = text;
+            w->view.error = true;
+            InvalidateRect(w->hwnd, nullptr, FALSE);
+        }
+        SetTimer(hwnd, 3, (UINT)seconds * 1000, nullptr);
+    }
+
+    void EndPunish() {
+        KillTimer(hwnd, 3);
+        for (size_t i = 0; i < g_windows.size(); ++i) {
+            Overlay* w = g_windows[i];
+            w->view.inputEnabled = true;
+            w->view.message.clear();
+            InvalidateRect(w->hwnd, nullptr, FALSE);
+        }
     }
 
     void Guard() {
@@ -209,12 +270,16 @@ LRESULT CALLBACK Overlay::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             InvalidateRect(hwnd, nullptr, FALSE);
         } else if (wp == 2) {
             self->Guard();
+        } else if (wp == 3) {
+            self->EndPunish();
         }
         return 0;
     case WM_CHAR: {
         wchar_t c = (wchar_t)wp;
-        if (c >= 32 && c != 127) {
-            self->view.password.push_back(c);
+        if (c >= 32 && c != 127 && self->view.inputEnabled) {
+            std::wstring& field = self->view.recovering ? self->view.recovery : self->view.password;
+            size_t limit = self->view.recovering ? 12 : 64;
+            if (field.size() < limit) field.push_back(c);
             self->view.message.clear();
             self->view.error = false;
             self->view.caretOn = true;
@@ -224,15 +289,33 @@ LRESULT CALLBACK Overlay::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_KEYDOWN:
         if (wp == VK_BACK) {
-            if (!self->view.password.empty()) self->view.password.pop_back();
+            std::wstring& field = self->view.recovering ? self->view.recovery : self->view.password;
+            if (!field.empty()) field.pop_back();
             InvalidateRect(hwnd, nullptr, FALSE);
         } else if (wp == VK_RETURN) {
-            self->TryUnlock();
+            if (self->view.recovering) self->TryRecovery();
+            else self->TryUnlock();
         }
         return 0;
-    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDOWN: {
         SetFocus(hwnd);
+        POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+        if (Inside(self->view.buttonRect, pt)) {
+            if (self->view.recovering) self->TryRecovery();
+            else self->TryUnlock();
+        } else if (!self->view.recovering && Inside(self->view.forgotRect, pt)) {
+            self->view.recovering = true;
+            self->view.password.clear();
+            self->view.message.clear();
+            InvalidateRect(hwnd, nullptr, FALSE);
+        } else if (Inside(self->view.backRect, pt)) {
+            self->view.recovering = false;
+            self->view.recovery.clear();
+            self->view.message.clear();
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
         return 0;
+    }
     case WM_DPICHANGED:
         self->UpdateScale();
         self->view.Reload(self->dc);

@@ -31,6 +31,11 @@ int wmain(int argc, wchar_t** argv) {
 
     lockview::View view;
     view.theme = themes::Find(app::cfg.ThemeId);
+    if (argc > 4 && _wcsicmp(argv[4], L"recovery") == 0) {
+        // 不锁屏也能看一眼恢复码面板长什么样。
+        view.recovering = true;
+        view.recovery = L"K7M2Q-9WXZ3";
+    }
     if (argc > 4 && _wcsicmp(argv[4], L"snapshot") == 0) {
         // 走一遍「用屏幕截图做模糊背景」的路子：GDI 抓主屏 → View 直接拿 DIB 建位图。
         HDC screen = GetDC(nullptr);

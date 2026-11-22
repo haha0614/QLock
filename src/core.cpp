@@ -256,6 +256,61 @@ std::wstring StoredPassword() {
     LocalFree(blobOut.pbData);
     return result;
 }
+static const wchar_t* kCodeAlphabet = L"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+// 去掉分隔符、转大写，校验和写盘都用这一份。
+static std::wstring NormalizeCode(const std::wstring& code) {
+    std::wstring out;
+    out.reserve(code.size());
+    for (size_t i = 0; i < code.size(); ++i) {
+        wchar_t ch = (wchar_t)towupper(code[i]);
+        if (ch == L'-' || ch == L' ') continue;
+        out.push_back(ch);
+    }
+    return out;
+}
+
+std::wstring NewRecoveryCode() {
+    BYTE raw[10] = {};
+    if (BCryptGenRandom(nullptr, raw, (ULONG)sizeof(raw), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0) return L"";
+    std::wstring code;
+    for (int i = 0; i < 10; ++i) {
+        if (i == 5) code.push_back(L'-');
+        code.push_back(kCodeAlphabet[raw[i] % 32]);
+    }
+    return code;
+}
+
+void SetRecovery(const std::wstring& code) {
+    std::vector<BYTE> salt(16);
+    if (BCryptGenRandom(nullptr, salt.data(), (ULONG)salt.size(), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0) return;
+    std::vector<BYTE> hash = Derive(NormalizeCode(code), salt, 120000, 32);
+    cfg.RecoverySalt = b64::Encode(salt.data(), salt.size());
+    cfg.RecoveryHash = b64::Encode(hash.data(), hash.size());
+    SaveConfig();
+    Log(L"recovery code set");
+}
+
+void ClearRecovery() {
+    cfg.RecoveryHash.clear();
+    cfg.RecoverySalt.clear();
+}
+
+bool HasRecovery() {
+    return !cfg.RecoveryHash.empty() && !cfg.RecoverySalt.empty();
+}
+
+bool VerifyRecovery(const std::wstring& code) {
+    if (!HasRecovery()) return false;
+    std::vector<BYTE> salt;
+    std::vector<BYTE> expect;
+    if (!b64::Decode(cfg.RecoverySalt, salt) || !b64::Decode(cfg.RecoveryHash, expect)) return false;
+    std::vector<BYTE> actual = Derive(NormalizeCode(code), salt, 120000, expect.size());
+    if (actual.size() != expect.size()) return false;
+    BYTE diff = 0;
+    for (size_t i = 0; i < actual.size(); ++i) diff |= (BYTE)(actual[i] ^ expect[i]);
+    return diff == 0;
+}
 } // namespace app
 
 namespace json {
