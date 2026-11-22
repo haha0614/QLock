@@ -43,6 +43,7 @@ namespace QLock
             Check(Auth.VerifyPassword(cfg, "p@ss"), "cfg verify password");
             Check(Auth.VerifyRecovery(cfg, code), "cfg verify recovery");
             Check(cfg.HasPassword, "cfg has password");
+            Check(Auth.StoredPassword(cfg) == "p@ss", "stored password reads back");
 
             string dir = Path.Combine(Path.GetTempPath(), "qlock-test-" + Guid.NewGuid().ToString("N"));
             ConfigStore.SetOverrideDir(dir);
@@ -65,6 +66,7 @@ namespace QLock
             Check(partial.InterceptWinL && partial.BlockSystemHotkeys && partial.ShowTray, "partial config keeps hardening defaults");
             Check(!partial.BackgroundSnapshot && partial.ShowClock && partial.ShowSubtitle && partial.CustomHotkeyEnabled, "partial config keeps appearance defaults");
             Check(partial.PasswordIterations == Auth.DefaultIterations, "partial config keeps iteration count");
+            Check(partial.PasswordCipher == "", "partial config keeps empty password cipher");
             Check(partial.Autostart == "none", "partial config keeps autostart default");
             Check(partial.LastUpdateCheckTicks == 0 && partial.SkippedVersion == "", "partial config keeps update defaults");
             Check(!partial.ClockFontEnabled && partial.FontFamily == "" && partial.ClockFont == "", "partial config keeps font defaults");

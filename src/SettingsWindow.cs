@@ -39,7 +39,7 @@ namespace QLock
         TextBox idleBox;
         TextBox subtitleBox;
         WrapPanel themeWrap;
-        Border previewHost;
+        Squircle previewHost;
         Button fontButton;
         Button clockFontButton;
         readonly Dictionary<string, Button> themeButtons = new Dictionary<string, Button>();
@@ -100,8 +100,10 @@ namespace QLock
             body.RowDefinitions.Add(new RowDefinition());
             body.RowDefinitions.Add(new RowDefinition());
             body.RowDefinitions.Add(new RowDefinition());
+            body.RowDefinitions.Add(new RowDefinition());
             body.RowDefinitions[0].Height = GridLength.Auto;
-            body.RowDefinitions[2].Height = GridLength.Auto;
+            body.RowDefinitions[1].Height = GridLength.Auto;
+            body.RowDefinitions[3].Height = GridLength.Auto;
             Grid.SetColumn(body, 1);
             root.Children.Add(body);
 
@@ -112,11 +114,16 @@ namespace QLock
             headerTitle = Ui.Text("", Design.FontTitle, Ui.TextPrimary, FontWeights.SemiBold);
             head.Children.Add(headerTitle);
 
+            // 预览固定在顶部，不跟着下面的设置项一起滚。
+            previewHost = BuildPreviewArea();
+            Grid.SetRow(previewHost, 1);
+            body.Children.Add(previewHost);
+
             scroller = new ScrollViewer();
             scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             scroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             scroller.Padding = new Thickness(Design.PanePad, Design.Gap4, Design.PanePad, Design.Gap8);
-            Grid.SetRow(scroller, 1);
+            Grid.SetRow(scroller, 2);
             body.Children.Add(scroller);
 
             StackPanel host = new StackPanel();
@@ -134,7 +141,7 @@ namespace QLock
             footer.BorderThickness = new Thickness(0, 1, 0, 0);
             footer.BorderBrush = Ui.Line;
             footer.Padding = new Thickness(Design.PanePad, Design.Gap12, Design.PanePad, Design.Gap12);
-            Grid.SetRow(footer, 2);
+            Grid.SetRow(footer, 3);
             body.Children.Add(footer);
 
             Grid foot = new Grid();
@@ -214,6 +221,7 @@ namespace QLock
             else if (id == "start") headerTitle.Text = "启动与锁定";
             else if (id == "hard") headerTitle.Text = "加固";
             else headerTitle.Text = "关于";
+            if (previewHost != null) previewHost.Visibility = id == "look" ? Visibility.Visible : Visibility.Collapsed;
             if (scroller != null) scroller.ScrollToTop();
         }
 
@@ -289,7 +297,7 @@ namespace QLock
         {
             StackPanel pane = new StackPanel();
 
-            // 密码只存 PBKDF2-SHA256（12 万次迭代）的 Hash 和 Salt，配置文件里没有明文。
+            // 校验只认 PBKDF2-SHA256（12 万次迭代）的 Hash；另有一份 DPAPI 加密的拷贝，仅用于在这里回显。
             Grid holder = new Grid();
             holder.Width = 260;
             holder.HorizontalAlignment = HorizontalAlignment.Left;
@@ -298,8 +306,11 @@ namespace QLock
             Ui.StyleInput(pwd1);
             holder.Children.Add(pwd1);
 
+            pwd1.Password = Auth.StoredPassword(cfg);
+
             pwdReveal = new TextBox();
             Ui.StyleInput(pwdReveal);
+            pwdReveal.Text = pwd1.Password;
             pwdReveal.Visibility = Visibility.Collapsed;
             holder.Children.Add(pwdReveal);
 
@@ -349,15 +360,25 @@ namespace QLock
         void ApplyPassword()
         {
             string p = CurrentPassword();
+            if (p.Length == 0)
+            {
+                SetStatus("要改密码就先输入新密码", true);
+                return;
+            }
             if (p.Length < 4)
             {
                 SetStatus("密码至少 4 位", true);
                 return;
             }
+            if (p == Auth.StoredPassword(cfg))
+            {
+                SetStatus("密码没变", false);
+                return;
+            }
             Auth.SetPassword(cfg, p);
             SaveNow("密码已更新");
-            pwd1.Password = "";
-            pwdReveal.Text = "";
+            pwd1.Password = p;
+            pwdReveal.Text = p;
         }
 
         void GenerateRecovery()
@@ -377,8 +398,6 @@ namespace QLock
         FrameworkElement BuildLookPane()
         {
             StackPanel pane = new StackPanel();
-
-            pane.Children.Add(BuildPreviewArea());
 
             themeWrap = new WrapPanel();
             themeWrap.Margin = new Thickness(0, -4, 0, 0);
@@ -491,7 +510,7 @@ namespace QLock
             SaveNow("时钟字体已换，下次锁屏生效");
         }
 
-        FrameworkElement BuildPreviewArea()
+        Squircle BuildPreviewArea()
         {
             previewHost = new Squircle();
             previewHost.Height = 216;
@@ -499,7 +518,7 @@ namespace QLock
             previewHost.BorderThickness = new Thickness(1);
             previewHost.BorderBrush = Ui.Line;
             previewHost.ClipToBounds = true;
-            previewHost.Margin = new Thickness(0, Design.Gap4, 0, Design.Gap12);
+            previewHost.Margin = new Thickness(Design.PanePad, Design.Gap4, Design.PanePad, Design.Gap12);
             RefreshPreview();
             return previewHost;
         }
@@ -509,6 +528,8 @@ namespace QLock
         {
             if (previewHost == null) return;
             LockTheme t = Themes.Find(cfg.ThemeId);
+            // 预览画布按 2.35 比例居中，两侧留白也填主题底色，看起来是一整块。
+            previewHost.Background = Ui.BrushOf(t.Background.Color, Brushes.Black);
 
             Grid root = new Grid();
             root.Width = 960;

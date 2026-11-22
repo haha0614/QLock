@@ -13,6 +13,8 @@ namespace QLock
         [DataMember] public string PasswordHash = "";
         [DataMember] public string PasswordSalt = "";
         [DataMember] public int PasswordIterations = Auth.DefaultIterations;
+        // 设置里要能回显当前密码，所以另存一份 DPAPI 加密的拷贝；校验只看上面的 Hash。
+        [DataMember] public string PasswordCipher = "";
         [DataMember] public string RecoveryHash = "";
         [DataMember] public string RecoverySalt = "";
 
@@ -46,6 +48,7 @@ namespace QLock
             PasswordHash = "";
             PasswordSalt = "";
             PasswordIterations = Auth.DefaultIterations;
+            PasswordCipher = "";
             RecoveryHash = "";
             RecoverySalt = "";
             InterceptWinL = true;

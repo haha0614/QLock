@@ -86,6 +86,30 @@ namespace QLock
             cfg.PasswordIterations = DefaultIterations;
             cfg.PasswordSalt = Convert.ToBase64String(salt);
             cfg.PasswordHash = Hash64(password, salt, DefaultIterations);
+            cfg.PasswordCipher = Protect(password);
+        }
+
+        public static string StoredPassword(AppConfig cfg)
+        {
+            if (string.IsNullOrEmpty(cfg.PasswordCipher)) return "";
+            try
+            {
+                byte[] cipher = Convert.FromBase64String(cfg.PasswordCipher);
+                byte[] plain = ProtectedData.Unprotect(cipher, null, DataProtectionScope.CurrentUser);
+                return Encoding.UTF8.GetString(plain);
+            }
+            catch { return ""; }
+        }
+
+        static string Protect(string text)
+        {
+            try
+            {
+                byte[] plain = Encoding.UTF8.GetBytes(text == null ? "" : text);
+                byte[] cipher = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser);
+                return Convert.ToBase64String(cipher);
+            }
+            catch { return ""; }
         }
 
         public static void SetRecovery(AppConfig cfg, string code)
