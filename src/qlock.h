@@ -72,6 +72,8 @@ bool LoadConfig();
 bool SaveConfig();
 bool HasPassword();
 bool VerifyPassword(const std::wstring& password);
+void SetPassword(const std::wstring& password);   // 写 Hash/Salt/Cipher 并立即保存
+std::wstring StoredPassword();                    // 解出 DPAPI 那份明文，只给设置页回显
 std::wstring ClockFontName();    // 时钟字体没开或没挑过就回落界面字体
 std::wstring UiFontName();
 

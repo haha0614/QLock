@@ -102,6 +102,9 @@ int main(int, char**) {
     app::cfg.PasswordSalt = b64::Encode(salt.data(), salt.size());
     app::cfg.PasswordHash = Pbkdf2(L"p@ss 密码", salt, app::cfg.PasswordIterations);
     Check(!app::cfg.PasswordHash.empty(), L"test hash computed");
+    app::SetPassword(L"p@ss 密码");
+    Check(app::StoredPassword() == L"p@ss 密码", L"stored password decrypts as utf-8");
+    Check(app::VerifyPassword(L"p@ss 密码"), L"password written by SetPassword verifies");
 
     Check(app::SaveConfig(), L"save config");
     Check(Exists(app::ConfigPath()), L"config file exists");

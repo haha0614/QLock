@@ -1,6 +1,7 @@
 #pragma once
 #include "qlock.h"
 #include <shlobj.h>
+#include <dpapi.h>
 #include <bcrypt.h>
 #include <cstdarg>
 #include <cstdio>
@@ -205,6 +206,55 @@ bool VerifyPassword(const std::wstring& password) {
     BYTE diff = 0;
     for (size_t i = 0; i < actual.size(); ++i) diff |= (BYTE)(actual[i] ^ expect[i]);
     return diff == 0;
+}
+
+static std::vector<BYTE> Derive(const std::wstring& password, const std::vector<BYTE>& salt, int iterations, size_t bytes) {
+    std::vector<BYTE> out(bytes);
+    BCRYPT_ALG_HANDLE alg = nullptr;
+    if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, BCRYPT_ALG_HANDLE_HMAC_FLAG) < 0) return out;
+    std::string raw = Utf8(password);
+    BCryptDeriveKeyPBKDF2(alg, (PUCHAR)raw.data(), (ULONG)raw.size(), (PUCHAR)salt.data(), (ULONG)salt.size(),
+                          (ULONGLONG)iterations, out.data(), (ULONG)out.size(), 0);
+    BCryptCloseAlgorithmProvider(alg, 0);
+    return out;
+}
+
+// 另存一份 DPAPI 加密的明文，只给设置页回显用；校验只看上面的 Hash。
+static std::wstring Protect(const std::wstring& text) {
+    std::string bytes = Utf8(text);
+    DATA_BLOB blobIn = { (DWORD)bytes.size(), (BYTE*)bytes.data() };
+    DATA_BLOB blobOut = {};
+    if (!CryptProtectData(&blobIn, L"QLock", nullptr, nullptr, nullptr, 0, &blobOut)) return L"";
+    std::wstring result = b64::Encode(blobOut.pbData, blobOut.cbData);
+    LocalFree(blobOut.pbData);
+    return result;
+}
+
+void SetPassword(const std::wstring& password) {
+    std::vector<BYTE> salt(16);
+    if (BCryptGenRandom(nullptr, salt.data(), (ULONG)salt.size(), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0) return;
+    cfg.PasswordIterations = 120000;
+    std::vector<BYTE> hash = Derive(password, salt, cfg.PasswordIterations, 32);
+    cfg.PasswordSalt = b64::Encode(salt.data(), salt.size());
+    cfg.PasswordHash = b64::Encode(hash.data(), hash.size());
+    cfg.PasswordCipher = Protect(password);
+    SaveConfig();
+    Log(L"password updated");
+}
+
+std::wstring StoredPassword() {
+    std::vector<BYTE> cipher;
+    if (!b64::Decode(cfg.PasswordCipher, cipher) || cipher.empty()) return L"";
+    DATA_BLOB blobIn = { (DWORD)cipher.size(), cipher.data() };
+    DATA_BLOB blobOut = {};
+    if (!CryptUnprotectData(&blobIn, nullptr, nullptr, nullptr, nullptr, 0, &blobOut)) return L"";
+    const char* bytes = (const char*)blobOut.pbData;
+    int len = (int)blobOut.cbData;
+    int n = MultiByteToWideChar(CP_UTF8, 0, bytes, len, nullptr, 0);
+    std::wstring result((size_t)(std::max)(0, n), 0);
+    if (n > 0) MultiByteToWideChar(CP_UTF8, 0, bytes, len, &result[0], n);
+    LocalFree(blobOut.pbData);
+    return result;
 }
 } // namespace app
 

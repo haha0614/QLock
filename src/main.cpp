@@ -1,6 +1,7 @@
 #pragma once
 #include "qlock.h"
 #include "resource.h"
+#include "settings_window.h"
 #include <shellapi.h>
 #include <objbase.h>
 #include <vector>
@@ -13,6 +14,7 @@ const UINT WM_APP_TRAY = WM_APP + 1;
 const UINT WM_APP_LOCK = WM_APP + 2;
 const UINT WM_APP_UNLOCK = WM_APP + 3;
 const UINT WM_APP_QUIT = WM_APP + 4;
+const UINT kShowSettings = RegisterWindowMessageW(L"QLock.ShowSettings");
 
 HWND g_main = nullptr;
 HHOOK g_hook = nullptr;
@@ -51,7 +53,7 @@ void TrayMenu() {
     GetCursorPos(&pt);
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, ID_MENU_LOCK, L"立即锁定");
-    AppendMenuW(menu, MF_STRING | MF_GRAYED, ID_MENU_SETTINGS, L"设置…（下一版）");
+    AppendMenuW(menu, MF_STRING, ID_MENU_SETTINGS, L"设置…");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ID_MENU_QUIT, L"退出");
     SetForegroundWindow(g_main);
@@ -143,6 +145,10 @@ bool IdleReached(int minutes) {
 }
 
 LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == kShowSettings) {
+        SettingsShow(nullptr);
+        return 0;
+    }
     switch (msg) {
     case WM_APP_TRAY:
         if (lp == WM_RBUTTONUP || lp == WM_CONTEXTMENU) TrayMenu();
@@ -178,7 +184,7 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         switch (LOWORD(wp)) {
         case ID_MENU_LOCK: DoLock(); return 0;
         case ID_MENU_SETTINGS:
-            MessageBoxW(nullptr, L"设置界面在下一版里，先用托盘菜单锁定和退出。", L"QLock", MB_OK | MB_ICONINFORMATION);
+            SettingsShow(g_main);
             return 0;
         case ID_MENU_QUIT: DoQuit(); return 0;
         }
@@ -236,6 +242,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\QLock.SingleInstance");
     if (mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
         app::Log(L"another instance is running, exit");
+        if (HasArg(args, L"--settings", nullptr)) {
+            HWND other = FindWindowExW(HWND_MESSAGE, nullptr, L"QLockMain", nullptr);
+            if (other) PostMessageW(other, kShowSettings, 0, 0);
+        }
         return 0;
     }
 
@@ -274,7 +284,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     }
     if (g_lifeSeconds > 0) g_lifeTimer = SetTimer(g_main, 2, 1000, nullptr);
 
-    if (HasArg(args, L"--lock", nullptr)) {
+    if (HasArg(args, L"--settings", nullptr)) {
+        SettingsShow(nullptr);
+    } else if (HasArg(args, L"--lock", nullptr)) {
         DoLock();
     } else if (args.empty() && app::cfg.LockOnStartup) {
         DoLock();
