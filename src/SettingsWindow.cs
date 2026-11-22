@@ -209,7 +209,7 @@ namespace QLock
                 kv.Value.Background = on ? Ui.Fg(46, 96, 150, 250) : Brushes.Transparent;
                 kv.Value.Foreground = on ? Ui.Accent : Ui.TextSecondary;
             }
-            if (id == "unlock") { headerTitle.Text = "解锁方式"; headerDesc.Text = "密码只用于解锁 QLock 自己的锁屏，跟 Windows 账户没有关系，输错也不会锁账户。"; }
+            if (id == "unlock") { headerTitle.Text = "解锁方式"; headerDesc.Text = "只用于本程序，和 Windows 账户密码无关，输错不会锁账户。"; }
             else if (id == "look") { headerTitle.Text = "外观"; headerDesc.Text = "锁屏长什么样。改完下一次锁屏就换过去。"; }
             else if (id == "start") { headerTitle.Text = "启动与锁定"; headerDesc.Text = "什么时候锁屏、开机要不要自动启动。"; }
             else if (id == "hard") { headerTitle.Text = "加固"; headerDesc.Text = "锁屏时挡掉常见的系统热键。这不是安全边界。"; }
@@ -224,7 +224,7 @@ namespace QLock
             Grid g = new Grid();
             g.ColumnDefinitions.Add(new ColumnDefinition());
             g.ColumnDefinitions.Add(new ColumnDefinition());
-            g.ColumnDefinitions[1].Width = new GridLength(190);
+            g.ColumnDefinitions[1].Width = GridLength.Auto;
 
             StackPanel texts = new StackPanel();
             texts.VerticalAlignment = VerticalAlignment.Center;
@@ -286,7 +286,7 @@ namespace QLock
 
         CheckBox Toggle(bool value)
         {
-            CheckBox cb = Ui.Check(value, "", 0);
+            CheckBox cb = Ui.Switch(value);
             cb.HorizontalAlignment = HorizontalAlignment.Right;
             return cb;
         }
@@ -303,8 +303,9 @@ namespace QLock
         {
             StackPanel pane = new StackPanel();
 
+            // 密码只存 PBKDF2-SHA256（12 万次迭代）的 Hash 和 Salt，配置文件里没有明文。
             Grid holder = new Grid();
-            holder.Width = 300;
+            holder.Width = 260;
             holder.HorizontalAlignment = HorizontalAlignment.Left;
 
             pwd1 = new PasswordBox();
@@ -327,17 +328,17 @@ namespace QLock
             pwdRow.Children.Add(holder);
 
             Button apply = Ui.Button("设置", false);
-            apply.Width = 78;
+            apply.Width = 72;
             apply.Margin = new Thickness(8, 0, 0, 0);
             apply.Click += delegate { ApplyPassword(); };
             pwdRow.Children.Add(apply);
 
-            pane.Children.Add(Block("解锁密码", cfg.HasPassword
-                ? "已经设置过。要改就输新的，至少要 4 位。"
-                : "还没有设。先设一个至少 4 位的密码。", pwdRow));
+            pane.Children.Add(Row("解锁密码", cfg.HasPassword
+                ? "留空不变，至少 4 位。"
+                : "还没设，至少 4 位。", pwdRow));
 
-            recStatus = Ui.Text(!string.IsNullOrEmpty(cfg.RecoveryHash) ? "状态：已设置恢复码。" : "状态：还没有恢复码。",
-                12, !string.IsNullOrEmpty(cfg.RecoveryHash) ? Ui.TextSecondary : Ui.TextSecondary, FontWeights.Normal);
+            recStatus = Ui.Text(!string.IsNullOrEmpty(cfg.RecoveryHash) ? "已设置恢复码。" : "还没有恢复码。",
+                12, Ui.TextSecondary, FontWeights.Normal);
 
             recOut = new TextBox();
             recOut.IsReadOnly = true;
@@ -357,12 +358,7 @@ namespace QLock
             recStack.Children.Add(genRec);
             recStack.Children.Add(recOut);
 
-            pane.Children.Add(Block("恢复码", "忘记密码时用它解锁。只显示一次，看到就抄下来。用过一次就作废，得再生成。", recStack));
-
-            TextBlock foot = Ui.Text("密码用 PBKDF2-SHA256 存成 Hash，配置里看不到明文。", 11.5, Ui.TextSecondary, FontWeights.Normal);
-            foot.TextWrapping = TextWrapping.Wrap;
-            foot.Margin = new Thickness(0, 14, 0, 0);
-            pane.Children.Add(foot);
+            pane.Children.Add(Row("恢复码", "忘记密码时用，只显示一次，用过作废。", recStack));
             return pane;
         }
 
@@ -386,7 +382,7 @@ namespace QLock
             Auth.SetRecovery(cfg, code);
             recOut.Text = code;
             recOut.Visibility = Visibility.Visible;
-            recStatus.Text = "状态：新恢复码已生成，也复制到剪贴板了。";
+            recStatus.Text = "新恢复码已生成，也复制到剪贴板了。";
             recStatus.Foreground = Ui.Good;
             try { Clipboard.SetText(code); } catch { }
             SaveNow("恢复码已更新");
@@ -542,7 +538,7 @@ namespace QLock
             Bind(elevated, delegate(bool on) { cfg.RunElevated = on; }, "已保存，下次启动生效");
             pane.Children.Add(Row("以管理员身份启动", "每次启动弹一次 UAC。取消授权就以普通权限继续跑。", elevated));
 
-            TextBlock note = Ui.Text("这三项一起开的话，登录后会先等 UAC 确认，那几秒桌面是露着的。建议关掉「以管理员身份启动」，需要时自己右键运行。",
+            TextBlock note = Ui.Text("三项一起开，登录后会先等 UAC 确认，那几秒桌面是露着的。建议关掉「以管理员身份启动」。",
                 11.5, Ui.TextSecondary, FontWeights.Normal);
             note.TextWrapping = TextWrapping.Wrap;
             note.Margin = new Thickness(0, 12, 0, 0);
@@ -583,17 +579,11 @@ namespace QLock
             Bind(block, delegate(bool on) { cfg.BlockSystemHotkeys = on; }, "已保存");
             pane.Children.Add(Row("锁定时拦截系统热键", "Win、Alt+Tab、Alt+Esc、Alt+F4、Ctrl+Esc、Ctrl+Shift+Esc 都会被吞掉。", block));
 
-            TextBlock t1 = Ui.Text("锁屏时任务管理器打不开——它会被压到锁屏窗口下面。Ctrl+Alt+Del 安全界面里的「任务管理器」也是同样的结果，「运行新任务」里执行 taskkill 才能真正结束本程序。",
+            TextBlock t1 = Ui.Text("锁屏时任务管理器会被压在下面，Ctrl+Alt+Del 里的也一样。要让它真结束不了，去「启动与锁定」勾上「以管理员身份启动」。",
                 11.5, Ui.TextSecondary, FontWeights.Normal);
             t1.TextWrapping = TextWrapping.Wrap;
             t1.Margin = new Thickness(0, 14, 0, 0);
             pane.Children.Add(t1);
-
-            TextBlock t2 = Ui.Text("想让人没法用任务管理器结束它，勾上「以管理员身份启动」——那样普通权限的任务管理器会提示拒绝访问。",
-                11.5, Ui.TextSecondary, FontWeights.Normal);
-            t2.TextWrapping = TextWrapping.Wrap;
-            t2.Margin = new Thickness(0, 8, 0, 0);
-            pane.Children.Add(t2);
 
             return pane;
         }

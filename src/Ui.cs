@@ -236,6 +236,58 @@ namespace QLock
             return cb;
         }
 
+        // 开关滑块：保留 CheckBox 的语义（UIA 里仍是勾选控件、空格能切换），只换外观。
+        public static CheckBox Switch(bool value)
+        {
+            CheckBox cb = new CheckBox();
+            cb.IsChecked = value;
+            cb.Cursor = Cursors.Hand;
+            cb.Foreground = Brushes.White;
+            cb.Background = Fg(50, 255, 255, 255);
+            cb.BorderBrush = Fg(40, 255, 255, 255);
+            cb.BorderThickness = new Thickness(1);
+            cb.VerticalAlignment = VerticalAlignment.Center;
+
+            ControlTemplate template = new ControlTemplate(typeof(CheckBox));
+            FrameworkElementFactory track = new FrameworkElementFactory(typeof(Border));
+            track.Name = "track";
+            track.SetValue(FrameworkElement.WidthProperty, 40.0);
+            track.SetValue(FrameworkElement.HeightProperty, 22.0);
+            track.SetValue(Border.CornerRadiusProperty, new CornerRadius(11));
+            track.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+            track.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Control.BorderBrushProperty));
+            track.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Control.BorderThicknessProperty));
+
+            FrameworkElementFactory knob = new FrameworkElementFactory(typeof(System.Windows.Shapes.Ellipse));
+            knob.Name = "knob";
+            knob.SetValue(FrameworkElement.WidthProperty, 14.0);
+            knob.SetValue(FrameworkElement.HeightProperty, 14.0);
+            knob.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Left);
+            knob.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            knob.SetValue(FrameworkElement.MarginProperty, new Thickness(4, 0, 0, 0));
+            knob.SetValue(System.Windows.Shapes.Shape.FillProperty, new TemplateBindingExtension(Control.ForegroundProperty));
+            track.AppendChild(knob);
+            template.VisualTree = track;
+
+            Trigger hover = new Trigger();
+            hover.Property = UIElement.IsMouseOverProperty;
+            hover.Value = true;
+            hover.Setters.Add(new Setter(Border.BorderBrushProperty, Fg(120, 255, 255, 255), "track"));
+            template.Triggers.Add(hover);
+
+            Trigger on = new Trigger();
+            on.Property = CheckBox.IsCheckedProperty;
+            on.Value = true;
+            on.Setters.Add(new Setter(Border.BackgroundProperty, Fg(255, 58, 118, 232), "track"));
+            on.Setters.Add(new Setter(Border.BorderBrushProperty, Fg(255, 58, 118, 232), "track"));
+            on.Setters.Add(new Setter(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Right, "knob"));
+            on.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(0, 0, 4, 0), "knob"));
+            template.Triggers.Add(on);
+
+            cb.Template = template;
+            return cb;
+        }
+
         public static Border Card(UIElement content, double topMargin)
         {
             Border card = new Border();
