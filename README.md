@@ -3,13 +3,13 @@
 Windows 上的一个锁屏小工具。锁定之后桌面变成一张模糊的截图，中间是时钟和密码框，输对密码就回桌面。
 密码是 QLock 自己的，和 Windows 账户没有关系，所以不会把 Windows 账户锁住、也不用记两个密码。
 
-版本 0.2.0，MIT 协议，未签名。
+版本 0.3.0，MIT 协议，未签名。
 
 ## 截图
 
 <img src="docs/screenshot-lock.png" width="820" alt="锁屏界面">
 
-<img src="docs/screenshot-settings.png" width="380" alt="设置窗">
+<img src="docs/screenshot-settings.png" width="460" alt="设置窗">
 
 ## 安装
 
@@ -47,17 +47,31 @@ Windows 上的一个锁屏小工具。锁定之后桌面变成一张模糊的截
 
 ## 设置里有什么
 
+左边一列导航，右边是这一页的设置项，一页就能看完，不用滚。
+
 | 分区 | 内容 |
 | --- | --- |
-| 解锁密码 | 一个输入框，右侧眼睛按钮可以看明文 |
-| 恢复码 | 生成新的恢复码，只显示一次，同时复制到剪贴板 |
-| 锁定触发方式 | 接管 Win+L、Ctrl+Alt+L、启动即锁、空闲 N 分钟 |
-| 外观 | 显示时钟、用截图做模糊背景（默认关）、提示文字 |
+| 解锁方式 | 改密码（右侧眼睛按钮可以看明文）、生成新的恢复码（只显示一次，同时复制到剪贴板） |
+| 外观 | 锁屏主题、显示时钟、用截图做模糊背景（默认关）、提示文字 |
+| 启动与锁定 | 接管 Win+L、Ctrl+Alt+L、启动即锁、空闲 N 分钟、登录时自动启动、以管理员身份启动 |
 | 加固 | 拦截系统热键 |
-| 开机自启 | 登录时自动启动、以管理员身份启动（和启动即锁的搭配见上面「安装」） |
-| 关于与更新 | 当前版本、手动检查更新 |
+| 关于 | 当前版本、检查更新、配置和日志的位置 |
 
-改完点保存，点关闭则丢弃没保存的修改。
+改完就生效，没有「保存」按钮：开关一拨就写进配置文件；密码要按旁边的「设置」才改。
+「以管理员身份启动」和「登录时自动启动 + 程序启动后立即锁定」一起用会在登录时露桌面，见上面「安装」。
+
+## 锁屏长什么样
+
+内置三套主题，在设置 → 外观里切换，改完下一次锁屏就换过去：
+
+- Windows 11 Fluent（默认）：时钟置上，下面是输入框和蓝色按钮，没有卡片
+- 卡片：中间一张半透明卡片，带 Q L O C K 字标
+- 极简：纯黑底，一条下划线输入框，「解锁」是文字按钮
+
+想自己改，点设置里的「打开主题文件夹」，里面是三套主题的 JSON。文件名随意，程序看文件里的 Id。
+内容按时钟、日期、卡片、字标、提示文字、输入框、按钮、链接、背景分块，颜色写 #AARRGGBB，尺寸是像素。
+单个文件最大 64 KB，最多读 40 个；解析不了的文件会被跳过、在日志里留一行，锁屏照常用内置主题。
+自己写的主题只要 Id 和内置的那套撞了，就会盖掉内置的。
 
 ## 命令行
 
@@ -73,12 +87,13 @@ Windows 上的一个锁屏小工具。锁定之后桌面变成一张模糊的截
 
 - 配置：`%APPDATA%\QLock\config.json`，只有密码 hash 和 salt，没有明文
 - 日志：`%LOCALAPPDATA%\QLock\qlock.log`，超过 512 KB 自动重建
+- 主题：`%APPDATA%\QLock\themes`，第一次启动时生成三套样例
 - 更新下载：`%TEMP%\QLock-update`，装完就删
 
 ## 卸载
 
 1. 托盘右键退出。先退出再删文件。
-2. 设置里取消「登录时自动启动」并保存。忘了也没关系，手动删 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 下的 `QLock` 值。
+2. 设置里关掉「登录时自动启动」（关掉就生效）。忘了也没关系，手动删 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 下的 `QLock` 值。
 3. 删掉程序目录，以及 `%APPDATA%\QLock`、`%LOCALAPPDATA%\QLock`。
 
 ## 还要改 Windows 的几个设置
@@ -121,7 +136,7 @@ Windows 不允许给已经跑起来的进程提权。不在管理员组的账号
 
 源码大致这样分：`Program.cs` 是外壳、单实例和命令行，`LockController.cs` 是状态机和键盘钩子，
 `Updater.cs` 查 Release、校验并替换 exe，`UpdateWindow.cs` 是那个更新窗口，
-`LockWindow.cs` 是每块屏一个的全屏窗口，`Native.cs` 放 P/Invoke，`Auth.cs` 是 PBKDF2 和恢复码，
+`LockWindow.cs` 是每块屏一个的全屏窗口，`LockTheme.cs` 是主题的读入和内置三套，`Native.cs` 放 P/Invoke，`Auth.cs` 是 PBKDF2 和恢复码，
 `AppConfig.cs` 是配置和原子写，剩下 `Ui.cs`、`SettingsWindow.cs`、`TrayIcon.cs`、`Snapshot.cs`、`Log.cs`。
 
 图标 `src\QLock.ico` 由 `tools\makeicon.ps1` 生成，用的是 QTools 那只兔子（Lucide rabbit，ISC）。

@@ -42,22 +42,27 @@ namespace QLock
 
         public static void StyleInput(Control c)
         {
-            StyleInput(c, false);
+            StyleInput(c, false, 34, 7, Fg(30, 255, 255, 255), Fg(80, 255, 255, 255), Brushes.White, 14);
         }
 
         public static void StyleInput(Control c, bool multiline)
         {
+            StyleInput(c, multiline, 34, 7, Fg(30, 255, 255, 255), Fg(80, 255, 255, 255), Brushes.White, 14);
+        }
+
+        public static void StyleInput(Control c, bool multiline, double height, double radius, Brush background, Brush borderBrush, Brush foreground, double fontSize)
+        {
             c.FontFamily = Font;
-            c.FontSize = 14;
-            c.Foreground = Brushes.White;
+            c.FontSize = fontSize;
+            c.Foreground = foreground;
             c.BorderThickness = new Thickness(1);
-            c.BorderBrush = Fg(80, 255, 255, 255);
-            c.Background = Fg(30, 255, 255, 255);
+            c.BorderBrush = borderBrush;
+            c.Background = background;
 
             ControlTemplate template = new ControlTemplate(c.GetType());
             FrameworkElementFactory border = new FrameworkElementFactory(typeof(Border));
             border.Name = "bg";
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(radius));
             border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
             border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Control.BorderBrushProperty));
             border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Control.BorderThicknessProperty));
@@ -71,7 +76,7 @@ namespace QLock
             border.AppendChild(host);
             template.VisualTree = border;
             c.Template = template;
-            if (!multiline) c.Height = 34;
+            if (!multiline) c.Height = height;
         }
 
         public static Button Button(string text, bool primary)
@@ -111,6 +116,110 @@ namespace QLock
 
             b.Template = template;
             return b;
+        }
+
+        public static Button StyledButton(string text, double height, double radius, Brush background, Brush foreground, Brush hover, Brush border, double fontSize)
+        {
+            Button b = new Button();
+            b.Content = text;
+            b.Height = height;
+            b.FontSize = fontSize;
+            b.FontFamily = Font;
+            b.Cursor = Cursors.Hand;
+            b.Foreground = foreground;
+            b.BorderThickness = new Thickness(border == null ? 0 : 1);
+            b.BorderBrush = border == null ? Brushes.Transparent : border;
+            b.Background = background;
+
+            ControlTemplate template = new ControlTemplate(typeof(Button));
+            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Border));
+            frame.Name = "bg";
+            frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(radius));
+            frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+            frame.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Control.BorderBrushProperty));
+            frame.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Control.BorderThicknessProperty));
+            FrameworkElementFactory presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            frame.AppendChild(presenter);
+            template.VisualTree = frame;
+
+            if (hover != null)
+            {
+                Trigger over = new Trigger();
+                over.Property = UIElement.IsMouseOverProperty;
+                over.Value = true;
+                over.Setters.Add(new Setter(Border.BackgroundProperty, hover, "bg"));
+                template.Triggers.Add(over);
+            }
+
+            b.Template = template;
+            return b;
+        }
+
+        public static bool TryColor(string hex, out Color color)
+        {
+            color = Colors.Black;
+            if (string.IsNullOrEmpty(hex)) return false;
+            string s = hex.Trim();
+            if (s.Length > 0 && s[0] == '#') s = s.Substring(1);
+            if (s.Length != 6 && s.Length != 8) return false;
+            try
+            {
+                if (s.Length == 8)
+                {
+                    color = Color.FromArgb(
+                        Convert.ToByte(s.Substring(0, 2), 16),
+                        Convert.ToByte(s.Substring(2, 2), 16),
+                        Convert.ToByte(s.Substring(4, 2), 16),
+                        Convert.ToByte(s.Substring(6, 2), 16));
+                }
+                else
+                {
+                    color = Color.FromArgb(255,
+                        Convert.ToByte(s.Substring(0, 2), 16),
+                        Convert.ToByte(s.Substring(2, 2), 16),
+                        Convert.ToByte(s.Substring(4, 2), 16));
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static Brush BrushOf(string hex, Brush fallback)
+        {
+            Color c;
+            if (!TryColor(hex, out c)) return fallback;
+            SolidColorBrush b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
+        public static Brush Shade(string hex, Brush fallback)
+        {
+            Color c;
+            if (!TryColor(hex, out c)) return fallback;
+            byte a = c.A;
+            int r = c.R, g = c.G, b = c.B;
+            if (a < 255)
+            {
+                a = (byte)Math.Min(255, a + 40);
+                r = Math.Min(255, r + 30);
+                g = Math.Min(255, g + 30);
+                b = Math.Min(255, b + 30);
+            }
+            else
+            {
+                r = Math.Min(255, r + 22);
+                g = Math.Min(255, g + 22);
+                b = Math.Min(255, b + 22);
+            }
+            SolidColorBrush br = new SolidColorBrush(Color.FromArgb(a, (byte)r, (byte)g, (byte)b));
+            br.Freeze();
+            return br;
         }
 
         public static CheckBox Check(bool value, string text, double topMargin)

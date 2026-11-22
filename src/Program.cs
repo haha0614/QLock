@@ -81,6 +81,7 @@ namespace QLock
 
             Config = ConfigStore.Load();
             Updater.CleanupOld();
+            try { Themes.EnsureSampleThemes(); } catch (Exception ex) { Log.Write("theme samples failed: " + ex.Message); }
 
             if (Config.RunElevated && !Native.IsElevated() && !HasArg("--elevated"))
             {

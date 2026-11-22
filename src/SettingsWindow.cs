@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,18 +18,26 @@ namespace QLock
         readonly Action<AppConfig> onSaved;
         readonly Action onCheckUpdate;
 
+        TextBlock statusText;
+        TextBlock headerTitle;
+        TextBlock headerDesc;
+        ScrollViewer scroller;
+        string currentPane;
+
         PasswordBox pwd1;
         TextBox pwdReveal;
         bool revealPwd;
         Line eyeSlash;
-        TextBox recOut;
+
         TextBlock recStatus;
-        TextBlock statusText;
-        CheckBox cbWinL, cbHotkey, cbLockOnStartup, cbShowClock, cbSnapshot;
-        CheckBox cbBlockHotkeys, cbAutostart, cbElevated;
+        TextBox recOut;
+
         TextBox idleBox;
         TextBox subtitleBox;
-        string pendingRecovery;
+        WrapPanel themeWrap;
+        readonly Dictionary<string, Button> themeButtons = new Dictionary<string, Button>();
+        readonly Dictionary<string, Button> navButtons = new Dictionary<string, Button>();
+        readonly Dictionary<string, FrameworkElement> panes = new Dictionary<string, FrameworkElement>();
 
         public SettingsWindow(AppConfig current, bool firstRun, Action<AppConfig> onSaved, Action onCheckUpdate)
         {
@@ -35,269 +45,598 @@ namespace QLock
             this.firstRun = firstRun;
             this.onSaved = onSaved;
             this.onCheckUpdate = onCheckUpdate;
-            pendingRecovery = null;
 
             Win = new Window();
             Win.Title = firstRun ? "QLock 首次设置" : "QLock 设置";
-            Win.Width = 600;
-            Win.Height = 800;
+            Win.Width = 780;
+            Win.Height = 580;
             Win.ResizeMode = ResizeMode.CanMinimize;
             Win.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Win.Background = new SolidColorBrush(Color.FromRgb(24, 27, 35));
             Win.FontFamily = Ui.Font;
             Win.Foreground = Ui.TextPrimary;
-
-            Grid root = new Grid();
-            root.RowDefinitions.Add(new RowDefinition());
-            root.RowDefinitions.Add(new RowDefinition());
-            root.RowDefinitions[1].Height = GridLength.Auto;
-
-            ScrollViewer scroll = new ScrollViewer();
-            scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            scroll.Padding = new Thickness(24, 20, 24, 8);
-            root.Children.Add(scroll);
-
-            StackPanel stack = new StackPanel();
-            scroll.Content = stack;
-
-            TextBlock title = Ui.Text(firstRun ? "欢迎使用 QLock" : "QLock 设置", 20, Ui.TextPrimary, FontWeights.SemiBold);
-            title.Margin = new Thickness(0, 0, 0, 4);
-            stack.Children.Add(title);
-
-            TextBlock intro = Ui.Text(firstRun
-                ? "先设置一个解锁密码。这个密码只属于 QLock，与 Windows 账户完全无关，输错也不会导致账户锁定。"
-                : "密码与 Windows 账户无关，只用于解锁 QLock 自己的锁屏。", 12.5, Ui.TextSecondary, FontWeights.Normal);
-            intro.TextWrapping = TextWrapping.Wrap;
-            intro.Margin = new Thickness(0, 0, 0, 16);
-            stack.Children.Add(intro);
-
-            // ---- password ----
-            StackPanel pwdSection = Ui.Section("解锁密码");
-            stack.Children.Add(Ui.Card(pwdSection, 0));
-
-            pwdSection.Children.Add(Ui.Label(cfg.HasPassword ? "修改密码（留空则保持不变）" : "设置密码"));
-            Grid pwdHost = new Grid();
-            pwdHost.Width = 340;
-            pwdHost.Margin = new Thickness(0, 6, 0, 0);
-
-            pwd1 = new PasswordBox();
-            Ui.StyleInput(pwd1);
-            pwdHost.Children.Add(pwd1);
-
-            pwdReveal = new TextBox();
-            Ui.StyleInput(pwdReveal);
-            pwdReveal.Visibility = Visibility.Collapsed;
-            pwdHost.Children.Add(pwdReveal);
-
-            Button eyeBtn = EyeButton();
-            eyeBtn.HorizontalAlignment = HorizontalAlignment.Right;
-            eyeBtn.VerticalAlignment = VerticalAlignment.Center;
-            eyeBtn.Margin = new Thickness(0, 0, 4, 0);
-            pwdHost.Children.Add(eyeBtn);
-
-            pwdSection.Children.Add(pwdHost);
-            TextBlock pwdHint = Ui.Text("锁屏密码，至少 4 位。只用于解锁 QLock；忘记后只能用恢复码打开。", 11.5, Ui.TextSecondary, FontWeights.Normal);
-            pwdHint.Margin = new Thickness(0, 6, 0, 0);
-            pwdSection.Children.Add(pwdHint);
-
-            // ---- recovery ----
-            StackPanel recSection = Ui.Section("恢复码");
-            stack.Children.Add(Ui.Card(recSection, 12));
-
-            recStatus = Ui.Text(!string.IsNullOrEmpty(cfg.RecoveryHash) ? "已设置恢复码。" : "尚未设置恢复码。", 12.5, Ui.TextSecondary, FontWeights.Normal);
-            recSection.Children.Add(recStatus);
-
-            TextBlock recHint = Ui.Text("忘记密码时用恢复码解锁。恢复码只显示一次，请抄下来放在安全的地方。", 11.5, Ui.TextSecondary, FontWeights.Normal);
-            recHint.TextWrapping = TextWrapping.Wrap;
-            recHint.Margin = new Thickness(0, 4, 0, 8);
-            recSection.Children.Add(recHint);
-
-            Button genRec = Ui.Button("生成新的恢复码", false);
-            genRec.Width = 150;
-            genRec.HorizontalAlignment = HorizontalAlignment.Left;
-            genRec.Click += delegate { GenerateRecovery(); };
-            recSection.Children.Add(genRec);
-
-            recOut = new TextBox();
-            recOut.IsReadOnly = true;
-            recOut.Width = 300;
-            recOut.Height = 34;
-            recOut.FontFamily = new FontFamily("Consolas, Microsoft YaHei UI");
-            Ui.StyleInput(recOut);
-            recOut.HorizontalAlignment = HorizontalAlignment.Left;
-            recOut.Margin = new Thickness(0, 10, 0, 0);
-            recOut.Visibility = Visibility.Collapsed;
-            recSection.Children.Add(recOut);
-
-            // ---- triggers ----
-            StackPanel trig = Ui.Section("锁定触发方式");
-            stack.Children.Add(Ui.Card(trig, 12));
-
-            cbWinL = Ui.Check(cfg.InterceptWinL, "接管 Win+L：按 Win+L 时由 QLock 锁定（不触发 Windows 锁屏）", 0);
-            trig.Children.Add(cbWinL);
-            cbHotkey = Ui.Check(cfg.CustomHotkeyEnabled, "自定义热键：Ctrl+Alt+L 锁定", 8);
-            trig.Children.Add(cbHotkey);
-            cbLockOnStartup = Ui.Check(cfg.LockOnStartup, "程序启动后立即锁定", 8);
-            trig.Children.Add(cbLockOnStartup);
-
-            StackPanel idleRow = new StackPanel();
-            idleRow.Orientation = Orientation.Horizontal;
-            idleRow.Margin = new Thickness(0, 10, 0, 0);
-            TextBlock idleLabel = Ui.Label("空闲自动锁定：");
-            idleLabel.VerticalAlignment = VerticalAlignment.Center;
-            idleRow.Children.Add(idleLabel);
-            idleBox = new TextBox();
-            idleBox.Width = 60;
-            idleBox.Text = cfg.IdleLockMinutes.ToString();
-            Ui.StyleInput(idleBox);
-            idleBox.TextAlignment = TextAlignment.Center;
-            idleRow.Children.Add(idleBox);
-            TextBlock idleUnit = Ui.Label(" 分钟内无输入则锁定（0 = 关闭）");
-            idleUnit.VerticalAlignment = VerticalAlignment.Center;
-            idleRow.Children.Add(idleUnit);
-            trig.Children.Add(idleRow);
-
-            // ---- appearance ----
-            StackPanel look = Ui.Section("外观");
-            stack.Children.Add(Ui.Card(look, 12));
-
-            cbShowClock = Ui.Check(cfg.ShowClock, "锁屏界面显示时钟和日期", 0);
-            look.Children.Add(cbShowClock);
-            cbSnapshot = Ui.Check(cfg.BackgroundSnapshot, "用当前屏幕截图做模糊背景", 8);
-            look.Children.Add(cbSnapshot);
-
-            StackPanel subRow = new StackPanel();
-            subRow.Orientation = Orientation.Horizontal;
-            subRow.Margin = new Thickness(0, 10, 0, 0);
-            TextBlock subLabel = Ui.Label("提示文字：");
-            subLabel.VerticalAlignment = VerticalAlignment.Center;
-            subRow.Children.Add(subLabel);
-            subtitleBox = new TextBox();
-            subtitleBox.Width = 260;
-            subtitleBox.Text = cfg.Subtitle;
-            Ui.StyleInput(subtitleBox);
-            subRow.Children.Add(subtitleBox);
-            look.Children.Add(subRow);
-
-            // ---- hardening ----
-            StackPanel hard = Ui.Section("加固（可选，默认关闭的部分请自行判断风险）");
-            stack.Children.Add(Ui.Card(hard, 12));
-
-            cbBlockHotkeys = Ui.Check(cfg.BlockSystemHotkeys, "锁定时拦截系统热键（Alt+Tab / Win / Alt+F4 / Ctrl+Esc / Ctrl+Shift+Esc）", 0);
-            hard.Children.Add(cbBlockHotkeys);
-            TextBlock tmHint = Ui.Text("提示：这里只挡顺手。想让人无法用任务管理器结束本程序，请在下方「开机自启」里勾选「以管理员身份启动」。Ctrl+Alt+Del 始终有效。", 11.5, Ui.TextSecondary, FontWeights.Normal);
-            tmHint.TextWrapping = TextWrapping.Wrap;
-            tmHint.Margin = new Thickness(22, 4, 0, 8);
-            hard.Children.Add(tmHint);
-
-            // ---- startup ----
-            StackPanel start = Ui.Section("开机自启");
-            stack.Children.Add(Ui.Card(start, 12));
-
-            cbAutostart = Ui.Check(cfg.Autostart == "runkey" || cfg.Autostart == "task", "登录时自动启动（写入当前用户启动项）", 0);
-            start.Children.Add(cbAutostart);
-            cbElevated = Ui.Check(cfg.RunElevated, "以管理员身份启动（每次启动弹一次 UAC）", 6);
-            start.Children.Add(cbElevated);
-
-            TextBlock elevHint = Ui.Text("管理员模式下普通权限无法结束本进程。取消 UAC 授权时以普通权限继续运行。和「登录时自动启动 + 程序启动后立即锁定」一起用，登录后会先等 UAC 确认，这段时间桌面是露着的。", 11.5, Ui.TextSecondary, FontWeights.Normal);
-            elevHint.TextWrapping = TextWrapping.Wrap;
-            elevHint.Margin = new Thickness(22, 4, 0, 2);
-            start.Children.Add(elevHint);
-
-            TextBlock autoHint = Ui.Text("当前启动项：" + (Autostart.DetectCurrent() == "runkey" ? "已启用" : "未启用") + "。启动时若取消 UAC 授权，会以普通权限继续运行。", 11.5, Ui.TextSecondary, FontWeights.Normal);
-            autoHint.TextWrapping = TextWrapping.Wrap;
-            autoHint.Margin = new Thickness(22, 4, 0, 2);
-            start.Children.Add(autoHint);
-
-            string env = "当前状态：" + (Native.IsElevated() ? "管理员权限运行" : "普通权限运行");
-            TextBlock envText = Ui.Text(env + "　|　配置文件：" + ConfigStore.FilePath, 11.5, Ui.TextSecondary, FontWeights.Normal);
-            envText.TextWrapping = TextWrapping.Wrap;
-            envText.Margin = new Thickness(0, 10, 0, 0);
-            start.Children.Add(envText);
-
-            // ---- about / update ----
-            StackPanel about = Ui.Section("关于与更新");
-            stack.Children.Add(Ui.Card(about, 12));
-
-            TextBlock verText = Ui.Text("QLock " + Updater.VersionText(Updater.CurrentVersion()) + "　每天第一次启动时自动检查一次更新。", 12, Ui.TextPrimary, FontWeights.Normal);
-            verText.TextWrapping = TextWrapping.Wrap;
-            about.Children.Add(verText);
-
-            StackPanel updRow = new StackPanel();
-            updRow.Orientation = Orientation.Horizontal;
-            updRow.Margin = new Thickness(0, 10, 0, 0);
-            about.Children.Add(updRow);
-
-            Button checkBtn = Ui.Button("检查更新", false);
-            checkBtn.Width = 110;
-            checkBtn.Click += delegate { if (onCheckUpdate != null) onCheckUpdate(); };
-            updRow.Children.Add(checkBtn);
-
-            TextBlock updHint = Ui.Text("有新版本时会先给你看更新内容，确认后才下载替换。", 11.5, Ui.TextSecondary, FontWeights.Normal);
-            updHint.TextWrapping = TextWrapping.Wrap;
-            updHint.VerticalAlignment = VerticalAlignment.Center;
-            updHint.Margin = new Thickness(12, 0, 0, 0);
-            updRow.Children.Add(updHint);
-
-            // ---- footer ----
-            Border footer = new Border();
-            footer.Background = new SolidColorBrush(Color.FromRgb(20, 23, 30));
-            footer.Padding = new Thickness(24, 12, 24, 12);
-            footer.BorderThickness = new Thickness(0, 1, 0, 0);
-            footer.BorderBrush = Ui.Fg(40, 255, 255, 255);
-            Grid.SetRow(footer, 1);
-            root.Children.Add(footer);
-
-            Grid footerGrid = new Grid();
-            footerGrid.ColumnDefinitions.Add(new ColumnDefinition());
-            footerGrid.ColumnDefinitions.Add(new ColumnDefinition());
-            footerGrid.ColumnDefinitions[1].Width = GridLength.Auto;
-            footer.Child = footerGrid;
-
-            statusText = Ui.Text("", 12.5, Ui.TextSecondary, FontWeights.Normal);
-            statusText.VerticalAlignment = VerticalAlignment.Center;
-            statusText.TextWrapping = TextWrapping.Wrap;
-            footerGrid.Children.Add(statusText);
-
-            StackPanel buttons = new StackPanel();
-            buttons.Orientation = Orientation.Horizontal;
-            Grid.SetColumn(buttons, 1);
-            footerGrid.Children.Add(buttons);
-
-            Button save = Ui.Button(firstRun ? "保存并完成" : "保存", true);
-            save.Width = 110;
-            save.Click += delegate { OnSave(); };
-            buttons.Children.Add(save);
-
-            Button close = Ui.Button(firstRun ? "取消" : "关闭", false);
-            close.Width = 84;
-            close.Margin = new Thickness(10, 0, 0, 0);
-            close.Click += delegate { Win.Close(); };
-            buttons.Children.Add(close);
-
-            Win.Content = root;
+            Win.Closing += OnClosing;
             Win.PreviewKeyDown += delegate(object s, KeyEventArgs e)
             {
                 if (e.Key == Key.Escape) Win.Close();
             };
+
+            Grid root = new Grid();
+            root.ColumnDefinitions.Add(new ColumnDefinition());
+            root.ColumnDefinitions.Add(new ColumnDefinition());
+            root.ColumnDefinitions[0].Width = new GridLength(192);
+
+            Border nav = new Border();
+            nav.Background = new SolidColorBrush(Color.FromRgb(18, 21, 28));
+            nav.BorderThickness = new Thickness(0, 0, 1, 0);
+            nav.BorderBrush = Ui.Fg(30, 255, 255, 255);
+            root.Children.Add(nav);
+
+            StackPanel navStack = new StackPanel();
+            navStack.Margin = new Thickness(14, 20, 14, 16);
+            TextBlock brand = Ui.Text("QLock", 17, Ui.TextPrimary, FontWeights.SemiBold);
+            brand.Margin = new Thickness(10, 0, 0, 16);
+            navStack.Children.Add(brand);
+
+            AddNav(navStack, "unlock", "解锁方式");
+            AddNav(navStack, "look", "外观");
+            AddNav(navStack, "start", "启动与锁定");
+            AddNav(navStack, "hard", "加固");
+            AddNav(navStack, "about", "关于");
+
+            TextBlock navFoot = Ui.Text(firstRun ? "首次设置" : "改动立即生效", 11.5, Ui.TextSecondary, FontWeights.Normal);
+            navFoot.Margin = new Thickness(10, 14, 0, 0);
+            navStack.Children.Add(navFoot);
+
+            nav.Child = navStack;
+
+            Grid body = new Grid();
+            body.RowDefinitions.Add(new RowDefinition());
+            body.RowDefinitions.Add(new RowDefinition());
+            body.RowDefinitions.Add(new RowDefinition());
+            body.RowDefinitions[0].Height = GridLength.Auto;
+            body.RowDefinitions[2].Height = GridLength.Auto;
+            Grid.SetColumn(body, 1);
+            root.Children.Add(body);
+
+            StackPanel head = new StackPanel();
+            head.Margin = new Thickness(28, 22, 28, 6);
+            body.Children.Add(head);
+
+            headerTitle = Ui.Text("", 19, Ui.TextPrimary, FontWeights.SemiBold);
+            head.Children.Add(headerTitle);
+
+            headerDesc = Ui.Text("", 12, Ui.TextSecondary, FontWeights.Normal);
+            headerDesc.TextWrapping = TextWrapping.Wrap;
+            headerDesc.Margin = new Thickness(0, 5, 0, 0);
+            head.Children.Add(headerDesc);
+
+            scroller = new ScrollViewer();
+            scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            scroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            scroller.Padding = new Thickness(28, 4, 22, 8);
+            Grid.SetRow(scroller, 1);
+            body.Children.Add(scroller);
+
+            StackPanel host = new StackPanel();
+            scroller.Content = host;
+
+            panes["unlock"] = BuildUnlockPane();
+            panes["look"] = BuildLookPane();
+            panes["start"] = BuildStartPane();
+            panes["hard"] = BuildHardPane();
+            panes["about"] = BuildAboutPane();
+            foreach (KeyValuePair<string, FrameworkElement> kv in panes) host.Children.Add(kv.Value);
+
+            Border footer = new Border();
+            footer.Background = new SolidColorBrush(Color.FromRgb(20, 23, 30));
+            footer.BorderThickness = new Thickness(0, 1, 0, 0);
+            footer.BorderBrush = Ui.Fg(30, 255, 255, 255);
+            footer.Padding = new Thickness(28, 10, 22, 10);
+            Grid.SetRow(footer, 2);
+            body.Children.Add(footer);
+
+            Grid foot = new Grid();
+            foot.ColumnDefinitions.Add(new ColumnDefinition());
+            foot.ColumnDefinitions.Add(new ColumnDefinition());
+            foot.ColumnDefinitions[1].Width = GridLength.Auto;
+            footer.Child = foot;
+
+            statusText = Ui.Text("", 12, Ui.TextSecondary, FontWeights.Normal);
+            statusText.VerticalAlignment = VerticalAlignment.Center;
+            statusText.TextWrapping = TextWrapping.Wrap;
+            foot.Children.Add(statusText);
+
+            StackPanel footButtons = new StackPanel();
+            footButtons.Orientation = Orientation.Horizontal;
+            Grid.SetColumn(footButtons, 1);
+            foot.Children.Add(footButtons);
+
+            Button done = Ui.Button(firstRun ? "完成" : "关闭", true);
+            done.Width = 96;
+            done.Click += delegate { Win.Close(); };
+            footButtons.Children.Add(done);
+
+            Win.Content = root;
+            SwitchTo("unlock");
+        }
+
+        // ---------- shell ----------
+
+        void AddNav(StackPanel host, string id, string label)
+        {
+            Button b = new Button();
+            b.Content = label;
+            b.Height = 34;
+            b.Margin = new Thickness(0, 1, 0, 1);
+            b.FontSize = 13.5;
+            b.FontFamily = Ui.Font;
+            b.Cursor = Cursors.Hand;
+            b.BorderThickness = new Thickness(0);
+            b.Background = Brushes.Transparent;
+            b.Foreground = Ui.TextSecondary;
+            b.HorizontalContentAlignment = HorizontalAlignment.Left;
+            b.Template = NavTemplate();
+            string target = id;
+            b.Click += delegate { SwitchTo(target); };
+            navButtons[id] = b;
+            host.Children.Add(b);
+        }
+
+        static ControlTemplate NavTemplate()
+        {
+            ControlTemplate template = new ControlTemplate(typeof(Button));
+            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Border));
+            frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
+            frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+            frame.SetValue(Border.PaddingProperty, new Thickness(11, 0, 11, 0));
+            FrameworkElementFactory presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Left);
+            presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            frame.AppendChild(presenter);
+            template.VisualTree = frame;
+            return template;
+        }
+
+        void SwitchTo(string id)
+        {
+            currentPane = id;
+            foreach (KeyValuePair<string, FrameworkElement> kv in panes)
+                kv.Value.Visibility = kv.Key == id ? Visibility.Visible : Visibility.Collapsed;
+            foreach (KeyValuePair<string, Button> kv in navButtons)
+            {
+                bool on = kv.Key == id;
+                kv.Value.Background = on ? Ui.Fg(46, 96, 150, 250) : Brushes.Transparent;
+                kv.Value.Foreground = on ? Ui.Accent : Ui.TextSecondary;
+            }
+            if (id == "unlock") { headerTitle.Text = "解锁方式"; headerDesc.Text = "密码只用于解锁 QLock 自己的锁屏，跟 Windows 账户没有关系，输错也不会锁账户。"; }
+            else if (id == "look") { headerTitle.Text = "外观"; headerDesc.Text = "锁屏长什么样。改完下一次锁屏就换过去。"; }
+            else if (id == "start") { headerTitle.Text = "启动与锁定"; headerDesc.Text = "什么时候锁屏、开机要不要自动启动。"; }
+            else if (id == "hard") { headerTitle.Text = "加固"; headerDesc.Text = "锁屏时挡掉常见的系统热键。这不是安全边界。"; }
+            else { headerTitle.Text = "关于"; headerDesc.Text = "版本、更新和文件放在哪。"; }
+            if (scroller != null) scroller.ScrollToTop();
+        }
+
+        // ---------- rows ----------
+
+        Border Row(string title, string desc, FrameworkElement control)
+        {
+            Grid g = new Grid();
+            g.ColumnDefinitions.Add(new ColumnDefinition());
+            g.ColumnDefinitions.Add(new ColumnDefinition());
+            g.ColumnDefinitions[1].Width = new GridLength(190);
+
+            StackPanel texts = new StackPanel();
+            texts.VerticalAlignment = VerticalAlignment.Center;
+            texts.Margin = new Thickness(0, 0, 18, 0);
+            texts.Children.Add(Ui.Text(title, 13.5, Ui.TextPrimary, FontWeights.Normal));
+            if (!string.IsNullOrEmpty(desc))
+            {
+                TextBlock d = Ui.Text(desc, 11.5, Ui.TextSecondary, FontWeights.Normal);
+                d.TextWrapping = TextWrapping.Wrap;
+                d.Margin = new Thickness(0, 3, 0, 0);
+                texts.Children.Add(d);
+            }
+            g.Children.Add(texts);
+
+            NameControl(control, title);
+            control.VerticalAlignment = VerticalAlignment.Center;
+            control.HorizontalAlignment = HorizontalAlignment.Right;
+            Grid.SetColumn(control, 1);
+            g.Children.Add(control);
+
+            Border line = new Border();
+            line.Padding = new Thickness(0, 11, 0, 11);
+            line.BorderThickness = new Thickness(0, 0, 0, 1);
+            line.BorderBrush = Ui.Fg(24, 255, 255, 255);
+            line.Child = g;
+            return line;
+        }
+
+        Border Block(string title, string desc, FrameworkElement control)
+        {
+            StackPanel s = new StackPanel();
+            s.Children.Add(Ui.Text(title, 13.5, Ui.TextPrimary, FontWeights.Normal));
+            if (!string.IsNullOrEmpty(desc))
+            {
+                TextBlock d = Ui.Text(desc, 11.5, Ui.TextSecondary, FontWeights.Normal);
+                d.TextWrapping = TextWrapping.Wrap;
+                d.Margin = new Thickness(0, 3, 0, 0);
+                s.Children.Add(d);
+            }
+            NameControl(control, title);
+            control.Margin = new Thickness(0, 10, 0, 0);
+            control.HorizontalAlignment = HorizontalAlignment.Left;
+            s.Children.Add(control);
+
+            Border line = new Border();
+            line.Padding = new Thickness(0, 11, 0, 11);
+            line.BorderThickness = new Thickness(0, 0, 0, 1);
+            line.BorderBrush = Ui.Fg(24, 255, 255, 255);
+            line.Child = s;
+            return line;
+        }
+
+        // 让无文字控件的无障碍名称跟随所在行标题，屏幕阅读器和 UIA 脚本都能定位。
+        static void NameControl(FrameworkElement control, string title)
+        {
+            if (control is CheckBox || control is TextBox || control is PasswordBox)
+                System.Windows.Automation.AutomationProperties.SetName(control, title);
+        }
+
+        CheckBox Toggle(bool value)
+        {
+            CheckBox cb = Ui.Check(value, "", 0);
+            cb.HorizontalAlignment = HorizontalAlignment.Right;
+            return cb;
+        }
+
+        void Bind(CheckBox cb, Action<bool> apply, string note)
+        {
+            cb.Checked += delegate { apply(true); SaveNow(note); };
+            cb.Unchecked += delegate { apply(false); SaveNow(note); };
+        }
+
+        // ---------- unlock ----------
+
+        FrameworkElement BuildUnlockPane()
+        {
+            StackPanel pane = new StackPanel();
+
+            Grid holder = new Grid();
+            holder.Width = 300;
+            holder.HorizontalAlignment = HorizontalAlignment.Left;
+
+            pwd1 = new PasswordBox();
+            Ui.StyleInput(pwd1);
+            holder.Children.Add(pwd1);
+
+            pwdReveal = new TextBox();
+            Ui.StyleInput(pwdReveal);
+            pwdReveal.Visibility = Visibility.Collapsed;
+            holder.Children.Add(pwdReveal);
+
+            Button eye = EyeButton();
+            eye.HorizontalAlignment = HorizontalAlignment.Right;
+            eye.VerticalAlignment = VerticalAlignment.Center;
+            eye.Margin = new Thickness(0, 0, 4, 0);
+            holder.Children.Add(eye);
+
+            StackPanel pwdRow = new StackPanel();
+            pwdRow.Orientation = Orientation.Horizontal;
+            pwdRow.Children.Add(holder);
+
+            Button apply = Ui.Button("设置", false);
+            apply.Width = 78;
+            apply.Margin = new Thickness(8, 0, 0, 0);
+            apply.Click += delegate { ApplyPassword(); };
+            pwdRow.Children.Add(apply);
+
+            pane.Children.Add(Block("解锁密码", cfg.HasPassword
+                ? "已经设置过。要改就输新的，至少要 4 位。"
+                : "还没有设。先设一个至少 4 位的密码。", pwdRow));
+
+            recStatus = Ui.Text(!string.IsNullOrEmpty(cfg.RecoveryHash) ? "状态：已设置恢复码。" : "状态：还没有恢复码。",
+                12, !string.IsNullOrEmpty(cfg.RecoveryHash) ? Ui.TextSecondary : Ui.TextSecondary, FontWeights.Normal);
+
+            recOut = new TextBox();
+            recOut.IsReadOnly = true;
+            recOut.Width = 200;
+            recOut.FontFamily = new FontFamily("Consolas, Microsoft YaHei UI");
+            Ui.StyleInput(recOut);
+            recOut.Visibility = Visibility.Collapsed;
+            recOut.Margin = new Thickness(0, 8, 0, 0);
+
+            Button genRec = Ui.Button("生成新的恢复码", false);
+            genRec.Width = 150;
+            genRec.Margin = new Thickness(0, 8, 0, 0);
+            genRec.Click += delegate { GenerateRecovery(); };
+
+            StackPanel recStack = new StackPanel();
+            recStack.Children.Add(recStatus);
+            recStack.Children.Add(genRec);
+            recStack.Children.Add(recOut);
+
+            pane.Children.Add(Block("恢复码", "忘记密码时用它解锁。只显示一次，看到就抄下来。用过一次就作废，得再生成。", recStack));
+
+            TextBlock foot = Ui.Text("密码用 PBKDF2-SHA256 存成 Hash，配置里看不到明文。", 11.5, Ui.TextSecondary, FontWeights.Normal);
+            foot.TextWrapping = TextWrapping.Wrap;
+            foot.Margin = new Thickness(0, 14, 0, 0);
+            pane.Children.Add(foot);
+            return pane;
+        }
+
+        void ApplyPassword()
+        {
+            string p = CurrentPassword();
+            if (p.Length < 4)
+            {
+                SetStatus("密码至少 4 位", true);
+                return;
+            }
+            Auth.SetPassword(cfg, p);
+            SaveNow("密码已更新");
+            pwd1.Password = "";
+            pwdReveal.Text = "";
         }
 
         void GenerateRecovery()
         {
-            pendingRecovery = Auth.NewRecoveryCode();
-            Auth.SetRecovery(cfg, pendingRecovery);
-            recOut.Text = pendingRecovery;
+            string code = Auth.NewRecoveryCode();
+            Auth.SetRecovery(cfg, code);
+            recOut.Text = code;
             recOut.Visibility = Visibility.Visible;
-            recStatus.Text = "新恢复码已生成并复制到剪贴板，点保存后生效，之后不会再显示。";
+            recStatus.Text = "状态：新恢复码已生成，也复制到剪贴板了。";
             recStatus.Foreground = Ui.Good;
-            try { Clipboard.SetText(pendingRecovery); } catch { }
+            try { Clipboard.SetText(code); } catch { }
+            SaveNow("恢复码已更新");
         }
 
-        void SetStatus(string text, bool error)
+        // ---------- look ----------
+
+        FrameworkElement BuildLookPane()
         {
-            statusText.Text = text;
-            statusText.Foreground = error ? Ui.Error : Ui.Good;
+            StackPanel pane = new StackPanel();
+
+            themeWrap = new WrapPanel();
+            themeWrap.Margin = new Thickness(0, -4, 0, 0);
+            PaintThemes();
+
+            Button openThemes = Ui.Button("打开主题文件夹", false);
+            openThemes.Width = 130;
+            openThemes.Margin = new Thickness(0, 10, 0, 0);
+            openThemes.Click += delegate { OpenThemeFolder(); };
+
+            StackPanel themeStack = new StackPanel();
+            themeStack.Children.Add(themeWrap);
+            themeStack.Children.Add(openThemes);
+
+            pane.Children.Add(Block("锁屏主题", "内置三套。也可以往文件夹里放自己的 JSON，文件名随意，格式照着样例改。", themeStack));
+
+            CheckBox clock = Toggle(cfg.ShowClock);
+            Bind(clock, delegate(bool on) { cfg.ShowClock = on; }, "已保存，下次锁屏生效");
+            pane.Children.Add(Row("显示时钟和日期", "锁屏中间上面那一行。", clock));
+
+            CheckBox snapshot = Toggle(cfg.BackgroundSnapshot);
+            Bind(snapshot, delegate(bool on) { cfg.BackgroundSnapshot = on; }, "已保存，下次锁屏生效");
+            pane.Children.Add(Row("用屏幕截图做模糊背景", "默认纯黑。勾上后锁定那一刻截一张屏，模糊当背景。", snapshot));
+
+            subtitleBox = new TextBox();
+            subtitleBox.Width = 190;
+            subtitleBox.Text = cfg.Subtitle;
+            Ui.StyleInput(subtitleBox);
+            subtitleBox.LostFocus += delegate { CommitSubtitle(); };
+            subtitleBox.KeyDown += delegate(object s, KeyEventArgs e)
+            {
+                if (e.Key == Key.Enter) { CommitSubtitle(); }
+            };
+            pane.Children.Add(Row("提示文字", "解锁输入框上方那句话。", subtitleBox));
+
+            return pane;
         }
+
+        void CommitSubtitle()
+        {
+            string text = subtitleBox.Text == null ? "" : subtitleBox.Text.Trim();
+            if (text.Length == 0) text = "输入密码解锁";
+            if (text == cfg.Subtitle) { subtitleBox.Text = text; return; }
+            cfg.Subtitle = text;
+            subtitleBox.Text = text;
+            SaveNow("已保存，下次锁屏生效");
+        }
+
+        void PaintThemes()
+        {
+            if (themeWrap == null) return;
+            themeWrap.Children.Clear();
+            themeButtons.Clear();
+            List<LockTheme> all = Themes.All();
+            foreach (LockTheme t in all)
+            {
+                bool on = t.Id == cfg.ThemeId;
+                Brush bg = on ? Ui.Fg(255, 96, 150, 250) : Ui.Fg(35, 255, 255, 255);
+                Brush fg = on ? Brushes.White : Ui.TextPrimary;
+                Button b = Ui.StyledButton(t.Name, 30, 15, bg, fg, Ui.Fg(90, 255, 255, 255), null, 12.5);
+                b.Width = 132;
+                b.Margin = new Thickness(0, 4, 8, 0);
+                string id = t.Id;
+                b.Click += delegate { PickTheme(id); };
+                themeButtons[id] = b;
+                themeWrap.Children.Add(b);
+            }
+        }
+
+        void PickTheme(string id)
+        {
+            if (id == cfg.ThemeId) return;
+            cfg.ThemeId = id;
+            PaintThemes();
+            SaveNow("已保存，下次锁屏生效");
+        }
+
+        void OpenThemeFolder()
+        {
+            try
+            {
+                Themes.EnsureSampleThemes();
+                Process.Start("explorer.exe", Themes.Dir);
+            }
+            catch (Exception ex)
+            {
+                SetStatus("打不开主题文件夹：" + ex.Message, true);
+            }
+        }
+
+        // ---------- start ----------
+
+        FrameworkElement BuildStartPane()
+        {
+            StackPanel pane = new StackPanel();
+
+            CheckBox winL = Toggle(cfg.InterceptWinL);
+            Bind(winL, delegate(bool on) { cfg.InterceptWinL = on; }, "已保存");
+            pane.Children.Add(Row("接管 Win+L", "按 Win+L 时锁 QLock 的屏，不触发 Windows 锁屏。", winL));
+
+            CheckBox hotkey = Toggle(cfg.CustomHotkeyEnabled);
+            Bind(hotkey, delegate(bool on) { cfg.CustomHotkeyEnabled = on; }, "已保存");
+            pane.Children.Add(Row("Ctrl+Alt+L 热键", "程序运行时按这个组合就能锁。", hotkey));
+
+            CheckBox onStart = Toggle(cfg.LockOnStartup);
+            Bind(onStart, delegate(bool on) { cfg.LockOnStartup = on; }, "已保存");
+            pane.Children.Add(Row("程序启动后立即锁定", "开机自启加这一项，登录后马上就是锁屏。", onStart));
+
+            idleBox = new TextBox();
+            idleBox.Width = 70;
+            idleBox.Text = cfg.IdleLockMinutes.ToString();
+            idleBox.TextAlignment = TextAlignment.Center;
+            Ui.StyleInput(idleBox);
+            idleBox.LostFocus += delegate { CommitIdle(); };
+            idleBox.KeyDown += delegate(object s, KeyEventArgs e)
+            {
+                if (e.Key == Key.Enter) { CommitIdle(); }
+            };
+            StackPanel idleRow = new StackPanel();
+            idleRow.Orientation = Orientation.Horizontal;
+            idleRow.Children.Add(idleBox);
+            TextBlock unit = Ui.Label("　分钟");
+            unit.VerticalAlignment = VerticalAlignment.Center;
+            idleRow.Children.Add(unit);
+            pane.Children.Add(Row("空闲自动锁定", "多久没输入就锁屏。0 表示不锁。", idleRow));
+
+            CheckBox autostart = Toggle(cfg.Autostart == "runkey" || cfg.Autostart == "task");
+            autostart.Checked += delegate
+            {
+                cfg.Autostart = "runkey";
+                SaveNow("已保存");
+                ApplyAutostart(true);
+            };
+            autostart.Unchecked += delegate
+            {
+                cfg.Autostart = "none";
+                SaveNow("已保存");
+                ApplyAutostart(false);
+            };
+            pane.Children.Add(Row("登录时自动启动", "写当前用户的启动项，不用管理员权限。", autostart));
+
+            CheckBox elevated = Toggle(cfg.RunElevated);
+            Bind(elevated, delegate(bool on) { cfg.RunElevated = on; }, "已保存，下次启动生效");
+            pane.Children.Add(Row("以管理员身份启动", "每次启动弹一次 UAC。取消授权就以普通权限继续跑。", elevated));
+
+            TextBlock note = Ui.Text("这三项一起开的话，登录后会先等 UAC 确认，那几秒桌面是露着的。建议关掉「以管理员身份启动」，需要时自己右键运行。",
+                11.5, Ui.TextSecondary, FontWeights.Normal);
+            note.TextWrapping = TextWrapping.Wrap;
+            note.Margin = new Thickness(0, 12, 0, 0);
+            pane.Children.Add(note);
+
+            return pane;
+        }
+
+        void CommitIdle()
+        {
+            string raw = idleBox.Text == null ? "" : idleBox.Text.Trim();
+            int minutes;
+            if (!int.TryParse(raw, out minutes) || minutes < 0 || minutes > 600)
+            {
+                SetStatus("空闲分钟数要填 0 到 600 之间的整数", true);
+                idleBox.Text = cfg.IdleLockMinutes.ToString();
+                return;
+            }
+            if (minutes == cfg.IdleLockMinutes) return;
+            cfg.IdleLockMinutes = minutes;
+            SaveNow("已保存");
+        }
+
+        void ApplyAutostart(bool on)
+        {
+            string err;
+            bool ok = Autostart.Apply(on, out err);
+            if (!ok) SetStatus("设置存下了，但启动项没写成功：" + (err == null ? "未知原因" : err), true);
+        }
+
+        // ---------- hard ----------
+
+        FrameworkElement BuildHardPane()
+        {
+            StackPanel pane = new StackPanel();
+
+            CheckBox block = Toggle(cfg.BlockSystemHotkeys);
+            Bind(block, delegate(bool on) { cfg.BlockSystemHotkeys = on; }, "已保存");
+            pane.Children.Add(Row("锁定时拦截系统热键", "Win、Alt+Tab、Alt+Esc、Alt+F4、Ctrl+Esc、Ctrl+Shift+Esc 都会被吞掉。", block));
+
+            TextBlock t1 = Ui.Text("锁屏时任务管理器打不开——它会被压到锁屏窗口下面。Ctrl+Alt+Del 安全界面里的「任务管理器」也是同样的结果，「运行新任务」里执行 taskkill 才能真正结束本程序。",
+                11.5, Ui.TextSecondary, FontWeights.Normal);
+            t1.TextWrapping = TextWrapping.Wrap;
+            t1.Margin = new Thickness(0, 14, 0, 0);
+            pane.Children.Add(t1);
+
+            TextBlock t2 = Ui.Text("想让人没法用任务管理器结束它，勾上「以管理员身份启动」——那样普通权限的任务管理器会提示拒绝访问。",
+                11.5, Ui.TextSecondary, FontWeights.Normal);
+            t2.TextWrapping = TextWrapping.Wrap;
+            t2.Margin = new Thickness(0, 8, 0, 0);
+            pane.Children.Add(t2);
+
+            return pane;
+        }
+
+        // ---------- about ----------
+
+        FrameworkElement BuildAboutPane()
+        {
+            StackPanel pane = new StackPanel();
+
+            TextBlock ver = Ui.Text(Updater.VersionText(Updater.CurrentVersion()), 13, Ui.TextPrimary, FontWeights.Normal);
+            ver.VerticalAlignment = VerticalAlignment.Center;
+
+            StackPanel verRow = new StackPanel();
+            verRow.Orientation = Orientation.Horizontal;
+            verRow.Children.Add(ver);
+
+            Button check = Ui.Button("检查更新", false);
+            check.Width = 100;
+            check.Margin = new Thickness(12, 0, 0, 0);
+            check.Click += delegate { if (onCheckUpdate != null) onCheckUpdate(); };
+            verRow.Children.Add(check);
+
+            pane.Children.Add(Row("版本", "每天第一次启动时自动查一次。", verRow));
+
+            string files = "配置：" + ConfigStore.FilePath + "\n" +
+                           "日志：" + Log.FilePath + "\n" +
+                           "主题：" + Themes.Dir;
+            TextBlock loc = Ui.Text(files, 11.5, Ui.TextSecondary, FontWeights.Normal);
+            loc.TextWrapping = TextWrapping.Wrap;
+            pane.Children.Add(Block("文件位置", "", loc));
+
+            string env = (Native.IsElevated() ? "以管理员权限运行" : "以普通权限运行") + "，";
+            env += firstRun ? "这是首次设置。" : "改过的选项都已保存。";
+            TextBlock envText = Ui.Text(env, 12, Ui.TextSecondary, FontWeights.Normal);
+            envText.TextWrapping = TextWrapping.Wrap;
+            envText.Margin = new Thickness(0, 14, 0, 0);
+            pane.Children.Add(envText);
+
+            return pane;
+        }
+
+        // ---------- password eye ----------
 
         Button EyeButton()
         {
@@ -381,44 +720,10 @@ namespace QLock
             return pwd1.Password;
         }
 
-        void OnSave()
+        // ---------- save ----------
+
+        void SaveNow(string note)
         {
-            string p1 = CurrentPassword();
-
-            if (p1.Length > 0)
-            {
-                if (p1.Length < 4)
-                {
-                    SetStatus("密码至少 4 位", true);
-                    return;
-                }
-            }
-            else if (!cfg.HasPassword)
-            {
-                SetStatus("请设置解锁密码", true);
-                return;
-            }
-
-            int minutes;
-            if (!int.TryParse((idleBox.Text == null ? "" : idleBox.Text).Trim(), out minutes) || minutes < 0 || minutes > 600)
-            {
-                SetStatus("空闲分钟数需为 0 到 600 之间的整数", true);
-                return;
-            }
-
-            if (p1.Length > 0) Auth.SetPassword(cfg, p1);
-
-            cfg.InterceptWinL = cbWinL.IsChecked == true;
-            cfg.CustomHotkeyEnabled = cbHotkey.IsChecked == true;
-            cfg.LockOnStartup = cbLockOnStartup.IsChecked == true;
-            cfg.IdleLockMinutes = minutes;
-            cfg.ShowClock = cbShowClock.IsChecked == true;
-            cfg.BackgroundSnapshot = cbSnapshot.IsChecked == true;
-            cfg.BlockSystemHotkeys = cbBlockHotkeys.IsChecked == true;
-            cfg.RunElevated = cbElevated.IsChecked == true;
-            cfg.Subtitle = string.IsNullOrEmpty(subtitleBox.Text) ? "输入密码解锁" : subtitleBox.Text.Trim();
-            cfg.Autostart = cbAutostart.IsChecked == true ? "runkey" : "none";
-
             try
             {
                 ConfigStore.Save(cfg);
@@ -429,19 +734,23 @@ namespace QLock
                 SetStatus("保存失败：" + ex.Message, true);
                 return;
             }
-
             if (onSaved != null) onSaved(cfg);
+            SetStatus(string.IsNullOrEmpty(note) ? "已保存" : note, false);
+        }
 
-            string err;
-            bool autoOk = Autostart.Apply(cfg.Autostart == "runkey", out err);
-            if (!autoOk)
-            {
-                SetStatus("设置已保存。" + (err == null ? "" : (" 自启提示：" + err)), true);
-                return;
-            }
+        void SetStatus(string text, bool error)
+        {
+            if (statusText == null) return;
+            statusText.Text = text;
+            statusText.Foreground = error ? Ui.Error : Ui.Good;
+        }
 
-            SetStatus("已保存" + (pendingRecovery == null ? "。" : "，恢复码已更新。"), false);
-            if (firstRun) Win.Close();
+        void OnClosing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (cfg.HasPassword) return;
+            e.Cancel = true;
+            SwitchTo("unlock");
+            SetStatus("先设一个解锁密码，不然锁上就打不开了", true);
         }
     }
 }

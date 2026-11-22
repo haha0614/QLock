@@ -30,6 +30,7 @@ namespace QLock
         [DataMember] public bool BackgroundSnapshot = false;
         [DataMember] public bool ShowClock = true;
         [DataMember] public string Subtitle = "输入密码解锁";
+        [DataMember] public string ThemeId = "fluent";
 
         [DataMember] public long LastUpdateCheckTicks = 0;
         [DataMember] public string SkippedVersion = "";
@@ -55,6 +56,7 @@ namespace QLock
             BackgroundSnapshot = false;
             ShowClock = true;
             Subtitle = "输入密码解锁";
+            ThemeId = "fluent";
             LastUpdateCheckTicks = 0;
             SkippedVersion = "";
         }
@@ -111,6 +113,7 @@ namespace QLock
                 AppConfig c = AppConfig.Deserialize(File.ReadAllText(FilePath, System.Text.Encoding.UTF8));
                 if (c == null) return new AppConfig();
                 if (c.PasswordIterations <= 0) c.PasswordIterations = Auth.DefaultIterations;
+                if (string.IsNullOrEmpty(c.ThemeId)) c.ThemeId = "fluent";
                 return c;
             }
             catch (Exception ex)

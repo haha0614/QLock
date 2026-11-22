@@ -1,4 +1,4 @@
-param([int]$Seconds = 60, [string]$Code = "TEST1-23456", [switch]$TypeCode)
+﻿param([int]$Seconds = 60, [string]$Code = "TEST1-23456", [switch]$TypeCode)
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -Namespace K -Name N -MemberDefinition @'
