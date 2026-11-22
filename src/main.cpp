@@ -16,6 +16,19 @@ const UINT WM_APP_UNLOCK = WM_APP + 3;
 const UINT WM_APP_QUIT = WM_APP + 4;
 const UINT kShowSettings = RegisterWindowMessageW(L"QLock.ShowSettings");
 
+#pragma comment(lib, "advapi32.lib")
+
+bool IsElevated() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+    TOKEN_ELEVATION info = {};
+    DWORD len = sizeof(info);
+    bool elevated = GetTokenInformation(token, TokenElevation, &info, sizeof(info), &len) &&
+                    info.TokenIsElevated != 0;
+    CloseHandle(token);
+    return elevated;
+}
+
 HWND g_main = nullptr;
 HHOOK g_hook = nullptr;
 UINT_PTR g_idleTimer = 0;
@@ -82,6 +95,13 @@ LRESULT CALLBACK HookProc(int code, WPARAM wp, LPARAM lp) {
     if (app::locked && LockScreensAlive()) {
         HWND fg = GetForegroundWindow();
         if (LockScreensContain(fg)) return CallNextHookEx(g_hook, code, wp, lp);
+
+        // 系统热键拦不拦看设置；关掉时这些组合原样交给系统，其余按键照旧吞掉。
+        if (!app::cfg.BlockSystemHotkeys) {
+            bool systemCombo = (vk == VK_LWIN || vk == VK_RWIN) || g_winDown || (alt && vk == VK_TAB) ||
+                               ((ctrl || alt) && vk == VK_ESCAPE) || (alt && vk == VK_F4) || vk == VK_APPS;
+            if (systemCombo) return CallNextHookEx(g_hook, code, wp, lp);
+        }
 
         DWORD now = GetTickCount();
         if (now - g_lastReclaim > 400) {
@@ -250,6 +270,21 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     }
 
     app::LoadConfig();
+
+    // 开了「以管理员身份启动」就带 --elevated 重新拉起自己；用户拒绝提权就继续跑。
+    if (app::cfg.RunElevated && !HasArg(args, L"--elevated", nullptr) && !IsElevated()) {
+        wchar_t self[MAX_PATH] = {};
+        GetModuleFileNameW(nullptr, self, MAX_PATH);
+        HINSTANCE raised = ShellExecuteW(nullptr, L"runas", self, L"--elevated --tray", nullptr, SW_SHOWNORMAL);
+        if ((INT_PTR)raised > 32) {
+            app::Log(L"relaunched elevated");
+            if (mutex) CloseHandle(mutex);
+            CoUninitialize();
+            return 0;
+        }
+        app::Log(L"elevation refused, continuing without admin rights");
+    }
+
     app::Log(L"QLock start pid=%lu args=%s", GetCurrentProcessId(), g_args.c_str());
 
     WNDCLASSEXW wc = {};

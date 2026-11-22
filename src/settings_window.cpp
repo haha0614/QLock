@@ -5,6 +5,8 @@
 #include "gfx.h"
 #include "lock_view.h"
 #include "font_list.h"
+#include "autostart.h"
+#include "updater.h"
 #include <commdlg.h>
 #include <shellapi.h>
 #include <dwmapi.h>
@@ -15,6 +17,7 @@
 #include <map>
 #include <algorithm>
 #include <cwctype>
+#include <thread>
 
 #pragma comment(lib, "comdlg32.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -94,6 +97,14 @@ enum {
     ID_CLOSE = 400,
     ID_EDIT_SUBTITLE = 500,
     ID_EDIT_PASSWORD = 501,
+    ID_EDIT_IDLE = 502,
+    ID_INTERCEPT_WINL = 360,
+    ID_HOTKEY = 361,
+    ID_LOCK_ON_START = 362,
+    ID_AUTOSTART = 363,
+    ID_ELEVATED = 364,
+    ID_BLOCK_HOTKEYS = 365,
+    ID_CHECK_UPDATE = 366,
     ID_FONT_UI = 340,
     ID_FONT_CLOCK = 341,
     ID_FONT_CLOCK_ON = 342,
@@ -142,6 +153,8 @@ public:
 
     std::wstring subtitleText;
     std::wstring passwordText;
+    std::wstring idleText;
+    bool checkingUpdate = false;
     int focus = 0;
     bool reveal = false;
     bool caretOn = true;
@@ -399,7 +412,11 @@ public:
     void Paint();
     void LayoutLook(float left, float right, float top, float bottom);
     void LayoutUnlock(float left, float right, float top, float bottom);
-    void LayoutNotes(float left, float right, float top, float bottom);
+    void LayoutStart(float left, float right, float top, float bottom);
+    void LayoutHard(float left, float right, float top, float bottom);
+    void LayoutAbout(float left, float right, float top, float bottom);
+    void CommitIdle();
+    void CheckUpdate();
     void PaintFooter(float w, float h, float left, float right);
     void PaintNav(float h);
 
@@ -746,26 +763,146 @@ void Settings::LayoutUnlock(float left, float right, float top, float bottom) {
               D2D1::RectF(left, y, right, y + 40), Color(kTextMuted));
 }
 
-void Settings::LayoutNotes(float left, float right, float top, float bottom) {
-    const wchar_t* lines[4] = { L"", L"", L"", L"" };
-    int count = 0;
-    if (pane == 2) {
-        lines[0] = L"这一页还没搬过来。开机自启、空闲锁定分钟数、锁定时拦截系统热键之后补上。";
-        count = 1;
-    } else if (pane == 3) {
-        lines[0] = L"这一页还没搬过来。拦截 Win+L、替换 Ctrl+Alt+L、需要管理员权限运行之后补上。";
-        count = 1;
-    } else {
-        lines[0] = L"QLock 0.4.0（C++ 重写，Direct2D 直绘）";
-        lines[1] = L"MIT 协议 · https://github.com/haha0614/QLock";
-        lines[2] = L"0.3.0 的 WPF 实现留在 wpf 分支和 v0.3.0 tag";
-        count = 3;
+void Settings::LayoutStart(float left, float right, float top, float bottom) {
+    float y = top - scroll;
+    auto toggleRow = [&](float yy, const wchar_t* label, bool value, int id) {
+        RowLine(yy, left, right);
+        gfx::Text(dc, fBody, label, D2D1::RectF(left, yy, left + 320, yy + RowH), Color(kText));
+        Rect r{ right - 40, yy + 12, right, yy + 12 + ControlH };
+        Toggle(r, value);
+        Widget wg; wg.id = id; wg.kind = K_TOGGLE; wg.rect = r; wg.on = value; widgets.push_back(wg);
+    };
+    toggleRow(y, L"接管 Win+L", app::cfg.InterceptWinL, ID_INTERCEPT_WINL);
+    y += RowH;
+    toggleRow(y, L"Ctrl+Alt+L 热键", app::cfg.CustomHotkeyEnabled, ID_HOTKEY);
+    y += RowH;
+    toggleRow(y, L"程序启动后立即锁定", app::cfg.LockOnStartup, ID_LOCK_ON_START);
+    y += RowH;
+
+    // 空闲自动锁定：分钟数自己画一个输入框，0 表示不锁。
+    RowLine(y, left, right);
+    gfx::Text(dc, fBody, L"空闲自动锁定", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
+    {
+        Rect field{ left + 200, y + 12, left + 270, y + 12 + ControlH };
+        DrawField(field, idleText, ID_EDIT_IDLE, false, true, L"0");
+        gfx::Text(dc, fSmall, L"分钟（0 = 不锁）", D2D1::RectF(field.r + 12, y, right - 40, y + RowH),
+                  Color(kTextDim));
     }
-    float y = top;
-    for (int i = 0; i < count; ++i) {
-        gfx::Text(dc, fBody, lines[i], D2D1::RectF(left, y, right, y + 28), Color(kTextDim));
-        y += 28;
+    y += RowH;
+
+    bool autoOn = app::cfg.Autostart == L"runkey" || app::cfg.Autostart == L"task";
+    toggleRow(y, L"登录时自动启动", autoOn, ID_AUTOSTART);
+    y += RowH;
+    toggleRow(y, L"以管理员身份启动", app::cfg.RunElevated, ID_ELEVATED);
+    y += RowH;
+
+    scrollMax = (std::max)(0.0f, (y + scroll) - bottom);
+}
+
+void Settings::LayoutHard(float left, float right, float top, float bottom) {
+    float y = top - scroll;
+    RowLine(y, left, right);
+    gfx::Text(dc, fBody, L"锁定时拦截系统热键", D2D1::RectF(left, y, left + 320, y + RowH), Color(kText));
+    {
+        Rect r{ right - 40, y + 12, right, y + 12 + ControlH };
+        Toggle(r, app::cfg.BlockSystemHotkeys);
+        Widget wg;
+        wg.id = ID_BLOCK_HOTKEYS;
+        wg.kind = K_TOGGLE;
+        wg.rect = r;
+        wg.on = app::cfg.BlockSystemHotkeys;
+        widgets.push_back(wg);
     }
+    y += RowH + 8;
+
+    const wchar_t* notes[3] = {
+        L"打开后，锁屏期间 Win、Win+Tab、Alt+Tab、Ctrl+Esc、Alt+F4 都不起作用。",
+        L"关掉就交给系统：切窗口、调音量这些照样能用，但别人可能绕开锁屏。",
+        L"接管 Win+L 和 Ctrl+Alt+L 在「启动与锁定」页。",
+    };
+    for (int i = 0; i < 3; ++i) {
+        gfx::Text(dc, fSmall, notes[i], D2D1::RectF(left, y, right, y + 26), Color(kTextMuted));
+        y += 26;
+    }
+    scrollMax = (std::max)(0.0f, (y + scroll) - bottom);
+}
+
+void Settings::LayoutAbout(float left, float right, float top, float bottom) {
+    float y = top - scroll;
+    RowLine(y, left, right);
+    gfx::Text(dc, fBody, L"版本", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
+    {
+        gfx::Text(dc, fBody, updater::CurrentVersion() + L"（C++ 重写，Direct2D 直绘）",
+                  D2D1::RectF(left + 200, y, right - 108, y + RowH), Color(kTextDim));
+        Rect check{ right - 100, y + 12, right, y + 12 + ControlH };
+        Button(check, checkingUpdate ? L"检查中…" : L"检查更新", false, hot == ID_CHECK_UPDATE, !checkingUpdate);
+        if (!checkingUpdate) {
+            Widget wg;
+            wg.id = ID_CHECK_UPDATE;
+            wg.kind = K_BTN;
+            wg.rect = check;
+            widgets.push_back(wg);
+        }
+    }
+    y += RowH + 8;
+
+    RowLine(y, left, right);
+    gfx::Text(dc, fBody, L"文件位置", D2D1::RectF(left, y, left + 200, y + 30), Color(kText));
+    y += 34;
+    const std::wstring paths[3] = { L"配置：" + app::ConfigPath(), L"日志：" + app::LogPath(),
+                                    L"主题：" + app::ThemeDir() };
+    for (int i = 0; i < 3; ++i) {
+        gfx::Text(dc, fSmall, paths[i], D2D1::RectF(left, y, right, y + 22), Color(kTextMuted));
+        y += 22;
+    }
+    y += 12;
+    gfx::Text(dc, fSmall, L"MIT 协议 · https://github.com/haha0614/QLock",
+              D2D1::RectF(left, y, right, y + 22), Color(kTextDim));
+    y += 22;
+    gfx::Text(dc, fSmall, L"0.3.0 的 WPF 实现留在 wpf 分支和 v0.3.0 tag",
+              D2D1::RectF(left, y, right, y + 22), Color(kTextMuted));
+    y += 22;
+    scrollMax = (std::max)(0.0f, (y + scroll) - bottom);
+}
+
+void Settings::CommitIdle() {
+    int minutes = idleText.empty() ? -1 : _wtoi(idleText.c_str());
+    if (minutes < 0 || minutes > 600) {
+        SetStatus(L"空闲分钟数要填 0 到 600 之间的整数", true);
+        idleText = std::to_wstring(app::cfg.IdleLockMinutes);
+        Invalidate();
+        return;
+    }
+    if (minutes == app::cfg.IdleLockMinutes) return;
+    app::cfg.IdleLockMinutes = minutes;
+    idleText = std::to_wstring(minutes);
+    FlushSave();
+}
+
+// 检查更新走后台线程，主线程只收结果；不下载也不替换，有新版本就把下载页打开。
+void Settings::CheckUpdate() {
+    if (checkingUpdate) return;
+    checkingUpdate = true;
+    SetStatus(L"正在检查更新…", false);
+    HWND target = hwnd;
+    std::thread([target]() {
+        std::wstring tag, url, error;
+        std::wstring status;
+        std::wstring* link = new std::wstring();
+        if (!updater::Check(&tag, &url, &error)) {
+            status = L"检查更新失败：" + error;
+        } else if (updater::IsNewer(tag, updater::CurrentVersion())) {
+            status = L"有新版本 " + tag + L"，已经打开下载页";
+            *link = url;
+        } else {
+            status = L"已经是最新版本 " + updater::CurrentVersion();
+        }
+        std::wstring* text = new std::wstring(status);
+        if (!PostMessageW(target, WM_APP + 5, (WPARAM)text, (LPARAM)link)) {
+            delete text;
+            delete link;
+        }
+    }).detach();
 }
 
 void Settings::Paint() {
@@ -792,8 +929,12 @@ void Settings::Paint() {
         LayoutLook(left, right, top, bottom);
     } else if (pane == 0) {
         LayoutUnlock(left, right, top, bottom);
+    } else if (pane == 2) {
+        LayoutStart(left, right, top, bottom);
+    } else if (pane == 3) {
+        LayoutHard(left, right, top, bottom);
     } else {
-        LayoutNotes(left, right, top, bottom);
+        LayoutAbout(left, right, top, bottom);
     }
 
     PaintFooter(w, h, left, right);
@@ -950,6 +1091,54 @@ void Settings::Apply(int id) {
         Invalidate();
         return;
     }
+    if (id == ID_INTERCEPT_WINL) {
+        app::cfg.InterceptWinL = !app::cfg.InterceptWinL;
+        QueueSave();
+        Invalidate();
+        return;
+    }
+    if (id == ID_HOTKEY) {
+        app::cfg.CustomHotkeyEnabled = !app::cfg.CustomHotkeyEnabled;
+        QueueSave();
+        Invalidate();
+        return;
+    }
+    if (id == ID_LOCK_ON_START) {
+        app::cfg.LockOnStartup = !app::cfg.LockOnStartup;
+        QueueSave();
+        Invalidate();
+        return;
+    }
+    if (id == ID_AUTOSTART) {
+        bool on = !(app::cfg.Autostart == L"runkey" || app::cfg.Autostart == L"task");
+        std::wstring error;
+        if (!autostart::Apply(on, &error)) {
+            SetStatus(L"启动项没写成功：" + (error.empty() ? L"未知原因" : error), true);
+            return;
+        }
+        app::cfg.Autostart = on ? L"runkey" : L"none";
+        app::SaveConfig();
+        SetStatus(on ? L"已加到当前用户的启动项，登录后自动运行" : L"已从启动项里删掉", false);
+        Invalidate();
+        return;
+    }
+    if (id == ID_ELEVATED) {
+        app::cfg.RunElevated = !app::cfg.RunElevated;
+        QueueSave();
+        SetStatus(L"已保存，下次启动时申请管理员权限", false);
+        Invalidate();
+        return;
+    }
+    if (id == ID_BLOCK_HOTKEYS) {
+        app::cfg.BlockSystemHotkeys = !app::cfg.BlockSystemHotkeys;
+        QueueSave();
+        Invalidate();
+        return;
+    }
+    if (id == ID_CHECK_UPDATE) {
+        CheckUpdate();
+        return;
+    }
     if (id == ID_CLOSE) {
         DestroyWindow(hwnd);
         return;
@@ -979,7 +1168,11 @@ void Settings::ClickAt(float x, float y, bool down) {
         }
         return;
     }
-    if (down && focus) { focus = 0; Invalidate(); }
+    if (down && focus) {
+        if (focus == ID_EDIT_IDLE) CommitIdle();
+        focus = 0;
+        Invalidate();
+    }
 }
 
 // ---- 窗口 ----
@@ -1032,6 +1225,9 @@ bool Settings::Create(HWND ownerWnd) {
     MakeFormats();
     subtitleText = app::cfg.Subtitle;
     passwordText = app::StoredPassword();
+    idleText = std::to_wstring(app::cfg.IdleLockMinutes);
+    // 启动项以注册表为准：有人手动删过，这里的开关就跟着变。
+    app::cfg.Autostart = autostart::Enabled() ? L"runkey" : L"none";
 
     if (!EnsureTarget()) {
         app::Log(L"settings: target failed");
@@ -1072,6 +1268,23 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)self);
     }
     if (!self) return DefWindowProcW(hwnd, msg, wp, lp);
+
+    // 后台线程的检查更新结果：wp=状态文字，lp=下载页（可能为空）。
+    if (msg == WM_APP + 5) {
+        std::wstring* text = (std::wstring*)wp;
+        std::wstring* url = (std::wstring*)lp;
+        self->checkingUpdate = false;
+        if (text) {
+            self->SetStatus(*text, false);
+            delete text;
+        }
+        if (url) {
+            if (!url->empty()) ShellExecuteW(nullptr, L"open", url->c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            delete url;
+        }
+        self->Invalidate();
+        return 0;
+    }
 
     switch (msg) {
     case WM_PAINT: {
@@ -1182,6 +1395,15 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             app::cfg.Subtitle = self->subtitleText;
             self->QueueSave();
+        } else if (self->focus == ID_EDIT_IDLE) {
+            if (ch == 8) {
+                if (self->idleText.empty()) return 0;
+                self->idleText.pop_back();
+            } else if (ch >= L'0' && ch <= L'9' && self->idleText.size() < 3) {
+                self->idleText.push_back(ch);
+            } else {
+                return 0;
+            }
         } else if (self->focus == ID_EDIT_PASSWORD) {
             if (ch == 8) {
                 if (self->passwordText.empty()) return 0;
@@ -1210,6 +1432,7 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         }
+        if (self->focus == ID_EDIT_IDLE && wp == VK_RETURN) { self->CommitIdle(); return 0; }
         if (wp == VK_ESCAPE) { DestroyWindow(hwnd); return 0; }
         return 0;
     case WM_CLOSE:
