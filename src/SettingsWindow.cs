@@ -6,7 +6,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Microsoft.Win32;
 
 namespace QLock
 {
@@ -43,6 +46,8 @@ namespace QLock
         public SettingsWindow(AppConfig current, bool firstRun, Action<AppConfig> onSaved, Action onCheckUpdate)
         {
             cfg = current.Clone();
+            wallpaperTried = false;
+            wallpaper = null;
             this.firstRun = firstRun;
             this.onSaved = onSaved;
             this.onCheckUpdate = onCheckUpdate;
@@ -428,7 +433,27 @@ namespace QLock
 
             if (cfg.BackgroundSnapshot)
             {
-                root.Background = new LinearGradientBrush(Color.FromRgb(44, 58, 84), Color.FromRgb(12, 15, 22), 40);
+                // 预览拿当前桌面壁纸顶替：真锁屏截的是锁那一刻的屏幕，壁纸就是最接近的东西。
+                ImageSource bg = Wallpaper();
+                if (bg != null)
+                {
+                    Image image = new Image();
+                    image.Source = bg;
+                    image.Stretch = Stretch.UniformToFill;
+                    BlurEffect blur = new BlurEffect();
+                    blur.Radius = Math.Max(0, t.Background.Blur * 0.5);
+                    blur.KernelType = KernelType.Gaussian;
+                    image.Effect = blur;
+                    image.Margin = new Thickness(-blur.Radius * 2);
+                    Border frame = new Border();
+                    frame.ClipToBounds = true;
+                    frame.Child = image;
+                    root.Children.Add(frame);
+                }
+                else
+                {
+                    root.Background = new LinearGradientBrush(Color.FromRgb(44, 58, 84), Color.FromRgb(12, 15, 22), 40);
+                }
                 Color baseColor;
                 if (Ui.TryColor(t.Background.Color, out baseColor))
                 {
@@ -565,6 +590,37 @@ namespace QLock
             view.Stretch = Stretch.Uniform;
             view.Child = root;
             previewHost.Child = view;
+        }
+
+        static ImageSource wallpaper;
+        static bool wallpaperTried;
+
+        // 取当前桌面壁纸：优先 Windows 转码后的那张（就是屏幕上显示的样子），没有再用注册表里的原图。
+        static ImageSource Wallpaper()
+        {
+            if (wallpaperTried) return wallpaper;
+            wallpaperTried = true;
+            try
+            {
+                string path = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "Microsoft", "Windows", "Themes", "TranscodedWallpaper");
+                if (!System.IO.File.Exists(path))
+                    path = Registry.GetValue("HKEY_CURRENT_USER\\Control Panel\\Desktop", "WallPaper", null) as string;
+                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return null;
+                BitmapImage image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.DecodePixelWidth = 960;
+                image.UriSource = new Uri(path, UriKind.Absolute);
+                image.EndInit();
+                image.Freeze();
+                wallpaper = image;
+            }
+            catch (Exception ex)
+            {
+                Log.Write("preview wallpaper failed: " + ex.Message);
+            }
+            return wallpaper;
         }
 
         void CommitSubtitle()
