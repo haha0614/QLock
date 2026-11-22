@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -34,6 +35,7 @@ namespace QLock
         TextBox idleBox;
         TextBox subtitleBox;
         WrapPanel themeWrap;
+        Border previewHost;
         readonly Dictionary<string, Button> themeButtons = new Dictionary<string, Button>();
         readonly Dictionary<string, Button> navButtons = new Dictionary<string, Button>();
         readonly Dictionary<string, FrameworkElement> panes = new Dictionary<string, FrameworkElement>();
@@ -82,10 +84,6 @@ namespace QLock
             AddNav(navStack, "start", "启动与锁定");
             AddNav(navStack, "hard", "加固");
             AddNav(navStack, "about", "关于");
-
-            TextBlock navFoot = Ui.Text(firstRun ? "首次设置" : "改动立即生效", 11.5, Ui.TextSecondary, FontWeights.Normal);
-            navFoot.Margin = new Thickness(10, 14, 0, 0);
-            navStack.Children.Add(navFoot);
 
             nav.Child = navStack;
 
@@ -372,27 +370,20 @@ namespace QLock
         {
             StackPanel pane = new StackPanel();
 
+            pane.Children.Add(BuildPreviewArea());
+
             themeWrap = new WrapPanel();
             themeWrap.Margin = new Thickness(0, -4, 0, 0);
             PaintThemes();
 
-            Button openThemes = Ui.Button("打开主题文件夹", false);
-            openThemes.Width = 130;
-            openThemes.Margin = new Thickness(0, 10, 0, 0);
-            openThemes.Click += delegate { OpenThemeFolder(); };
-
-            StackPanel themeStack = new StackPanel();
-            themeStack.Children.Add(themeWrap);
-            themeStack.Children.Add(openThemes);
-
-            pane.Children.Add(Block("锁屏主题", themeStack));
+            pane.Children.Add(Block("锁屏主题", themeWrap));
 
             CheckBox clock = Toggle(cfg.ShowClock);
-            Bind(clock, delegate(bool on) { cfg.ShowClock = on; }, "已保存，下次锁屏生效");
+            Bind(clock, delegate(bool on) { cfg.ShowClock = on; RefreshPreview(); }, "已保存，下次锁屏生效");
             pane.Children.Add(Row("显示时钟和日期", clock));
 
             CheckBox snapshot = Toggle(cfg.BackgroundSnapshot);
-            Bind(snapshot, delegate(bool on) { cfg.BackgroundSnapshot = on; }, "已保存，下次锁屏生效");
+            Bind(snapshot, delegate(bool on) { cfg.BackgroundSnapshot = on; RefreshPreview(); }, "已保存，下次锁屏生效");
             pane.Children.Add(Row("用屏幕截图做模糊背景", snapshot));
 
             subtitleBox = new TextBox();
@@ -400,6 +391,7 @@ namespace QLock
             subtitleBox.Text = cfg.Subtitle;
             Ui.StyleInput(subtitleBox);
             subtitleBox.LostFocus += delegate { CommitSubtitle(); };
+            subtitleBox.TextChanged += delegate { RefreshPreview(); };
             subtitleBox.KeyDown += delegate(object s, KeyEventArgs e)
             {
                 if (e.Key == Key.Enter) { CommitSubtitle(); }
@@ -409,6 +401,172 @@ namespace QLock
             return pane;
         }
 
+        FrameworkElement BuildPreviewArea()
+        {
+            previewHost = new Border();
+            previewHost.Height = 176;
+            previewHost.CornerRadius = new CornerRadius(10);
+            previewHost.BorderThickness = new Thickness(1);
+            previewHost.BorderBrush = Ui.Fg(28, 255, 255, 255);
+            previewHost.ClipToBounds = true;
+            previewHost.Margin = new Thickness(0, 2, 0, 8);
+            RefreshPreview();
+            return previewHost;
+        }
+
+        // 预览按锁屏窗口的同一套字段和顺序拼出来，只改尺寸来源，保证所见接近锁屏本身。
+        void RefreshPreview()
+        {
+            if (previewHost == null) return;
+            LockTheme t = Themes.Find(cfg.ThemeId);
+
+            Grid root = new Grid();
+            root.Width = 960;
+            root.Height = 308;
+            root.ClipToBounds = true;
+            root.Background = Ui.BrushOf(t.Background.Color, Brushes.Black);
+
+            if (cfg.BackgroundSnapshot)
+            {
+                root.Background = new LinearGradientBrush(Color.FromRgb(44, 58, 84), Color.FromRgb(12, 15, 22), 40);
+                Color baseColor;
+                if (Ui.TryColor(t.Background.Color, out baseColor))
+                {
+                    byte alpha = (byte)Math.Max(0, Math.Min(255, t.Background.Dim));
+                    Rectangle dim = new Rectangle();
+                    dim.Fill = new SolidColorBrush(Color.FromArgb(alpha, baseColor.R, baseColor.G, baseColor.B));
+                    root.Children.Add(dim);
+                }
+            }
+
+            StackPanel column = new StackPanel();
+            column.HorizontalAlignment = HorizontalAlignment.Center;
+            column.VerticalAlignment = VerticalAlignment.Center;
+
+            bool showClock = cfg.ShowClock && t.Clock.Show;
+            TextBlock clock = Ui.Text(DateTime.Now.ToString("HH:mm"), t.Clock.Size,
+                Ui.BrushOf(t.Clock.Color, Brushes.White), FontWeight.FromOpenTypeWeight(t.Clock.Weight));
+            clock.HorizontalAlignment = HorizontalAlignment.Center;
+            clock.Visibility = showClock ? Visibility.Visible : Visibility.Collapsed;
+            column.Children.Add(clock);
+
+            TextBlock date = Ui.Text(DateTime.Now.ToString(t.DateFormat, new CultureInfo("zh-CN")), t.Date.Size,
+                Ui.BrushOf(t.Date.Color, Ui.TextSecondary), FontWeights.Normal);
+            date.HorizontalAlignment = HorizontalAlignment.Center;
+            date.Margin = new Thickness(0, 2, 0, t.Date.Gap);
+            date.Visibility = clock.Visibility;
+            column.Children.Add(date);
+
+            Border card = new Border();
+            if (t.Card.Show)
+            {
+                card.Width = t.Card.Width;
+                card.CornerRadius = new CornerRadius(t.Card.Radius);
+                card.Padding = new Thickness(t.Card.PadH, t.Card.PadV, t.Card.PadH, t.Card.PadV);
+                card.Background = Ui.BrushOf(t.Card.Bg, Brushes.Transparent);
+                card.BorderThickness = new Thickness(1);
+                card.BorderBrush = Ui.BrushOf(t.Card.Border, Brushes.Transparent);
+            }
+            else
+            {
+                card.Padding = new Thickness(0);
+                card.Background = Brushes.Transparent;
+                card.BorderThickness = new Thickness(0);
+            }
+            column.Children.Add(card);
+
+            StackPanel body = new StackPanel();
+            if (!t.Card.Show && t.Input.Width > 0) body.Width = t.Input.Width;
+            card.Child = body;
+
+            if (t.Brand.Show)
+            {
+                TextBlock brand = Ui.Text(t.Brand.Text, t.Brand.Size,
+                    Ui.BrushOf(t.Brand.Color, Ui.TextSecondary), FontWeights.SemiBold);
+                brand.Margin = new Thickness(0, 0, 0, t.Brand.Gap);
+                body.Children.Add(brand);
+            }
+
+            string subtitle = subtitleBox == null ? cfg.Subtitle : subtitleBox.Text;
+            if (subtitle == null) subtitle = "";
+            subtitle = subtitle.Trim();
+            if (subtitle.Length == 0) subtitle = "输入密码解锁";
+            TextBlock sub = Ui.Text(subtitle, t.Subtitle.Size,
+                Ui.BrushOf(t.Subtitle.Color, Ui.TextPrimary), FontWeights.Normal);
+            sub.Margin = new Thickness(0, 0, 0, t.Subtitle.Gap);
+            body.Children.Add(sub);
+
+            bool underline = string.Equals(t.Input.Kind, "underline", StringComparison.OrdinalIgnoreCase);
+            Border input = new Border();
+            input.Height = t.Input.Height;
+            if (underline)
+            {
+                input.Background = Brushes.Transparent;
+                input.BorderThickness = new Thickness(0, 0, 0, 1);
+                input.BorderBrush = Ui.BrushOf(t.Input.Border, Ui.Fg(80, 255, 255, 255));
+            }
+            else
+            {
+                input.Background = Ui.BrushOf(t.Input.Bg, Ui.Fg(30, 255, 255, 255));
+                input.CornerRadius = new CornerRadius(t.Input.Radius);
+                input.BorderThickness = new Thickness(1);
+                input.BorderBrush = Ui.BrushOf(t.Input.Border, Ui.Fg(80, 255, 255, 255));
+            }
+            TextBlock hint = Ui.Text("锁屏密码", Math.Max(10, t.Input.Size - 1),
+                Ui.BrushOf(t.Input.Hint, Ui.TextSecondary), FontWeights.Normal);
+            hint.VerticalAlignment = VerticalAlignment.Center;
+            hint.Margin = new Thickness(underline ? 0 : 13, 0, 0, 0);
+            input.Child = hint;
+
+            bool outline = string.Equals(t.Button.Kind, "outline", StringComparison.OrdinalIgnoreCase);
+            bool flat = string.Equals(t.Button.Kind, "text", StringComparison.OrdinalIgnoreCase);
+            Brush btnBg = flat ? Brushes.Transparent : Ui.BrushOf(t.Button.Bg, Ui.Fg(255, 58, 118, 232));
+            Brush btnFg = Ui.BrushOf(t.Button.Fg, Brushes.White);
+            Brush btnHover = string.IsNullOrEmpty(t.Button.Hover)
+                ? Ui.Shade(t.Button.Bg, Ui.Fg(255, 78, 138, 250))
+                : Ui.BrushOf(t.Button.Hover, Ui.Fg(255, 78, 138, 250));
+            Brush btnBorder = outline ? Ui.BrushOf(t.Button.Border, Ui.Fg(90, 255, 255, 255)) : null;
+            Button unlock = Ui.StyledButton("解锁", t.Button.Height, t.Button.Radius, btnBg, btnFg, btnHover, btnBorder, t.Button.Size);
+            unlock.Focusable = false;
+            unlock.IsHitTestVisible = false;
+
+            if (t.Inline)
+            {
+                Grid row = new Grid();
+                row.ColumnDefinitions.Add(new ColumnDefinition());
+                ColumnDefinition auto = new ColumnDefinition();
+                auto.Width = GridLength.Auto;
+                row.ColumnDefinitions.Add(auto);
+                row.Children.Add(input);
+                unlock.Height = t.Input.Height;
+                unlock.Width = t.Button.Width > 0 ? t.Button.Width : 96;
+                unlock.Margin = new Thickness(8, 0, 0, 0);
+                Grid.SetColumn(unlock, 1);
+                row.Children.Add(unlock);
+                body.Children.Add(row);
+            }
+            else
+            {
+                body.Children.Add(input);
+                if (t.Button.Width > 0) unlock.Width = t.Button.Width;
+                unlock.Margin = new Thickness(0, t.Button.Gap, 0, 0);
+                body.Children.Add(unlock);
+            }
+
+            TextBlock forgot = Ui.Text("忘记密码？用恢复码解锁", t.Link.Size,
+                Ui.BrushOf(t.Link.Color, Ui.Accent), FontWeights.Normal);
+            forgot.HorizontalAlignment = HorizontalAlignment.Center;
+            forgot.Margin = new Thickness(0, t.Link.Gap, 0, 0);
+            body.Children.Add(forgot);
+
+            root.Children.Add(column);
+
+            Viewbox view = new Viewbox();
+            view.Stretch = Stretch.Uniform;
+            view.Child = root;
+            previewHost.Child = view;
+        }
+
         void CommitSubtitle()
         {
             string text = subtitleBox.Text == null ? "" : subtitleBox.Text.Trim();
@@ -416,6 +574,7 @@ namespace QLock
             if (text == cfg.Subtitle) { subtitleBox.Text = text; return; }
             cfg.Subtitle = text;
             subtitleBox.Text = text;
+            RefreshPreview();
             SaveNow("已保存，下次锁屏生效");
         }
 
@@ -431,13 +590,19 @@ namespace QLock
                 Brush bg = on ? Ui.Fg(255, 96, 150, 250) : Ui.Fg(35, 255, 255, 255);
                 Brush fg = on ? Brushes.White : Ui.TextPrimary;
                 Button b = Ui.StyledButton(t.Name, 30, 15, bg, fg, Ui.Fg(90, 255, 255, 255), null, 12.5);
-                b.Width = 132;
+                b.Width = 118;
                 b.Margin = new Thickness(0, 4, 8, 0);
                 string id = t.Id;
                 b.Click += delegate { PickTheme(id); };
                 themeButtons[id] = b;
                 themeWrap.Children.Add(b);
             }
+
+            Button folder = Ui.StyledButton("主题文件夹", 30, 15, Ui.Fg(35, 255, 255, 255), Ui.TextPrimary, Ui.Fg(90, 255, 255, 255), null, 12.5);
+            folder.Width = 118;
+            folder.Margin = new Thickness(0, 4, 8, 0);
+            folder.Click += delegate { OpenThemeFolder(); };
+            themeWrap.Children.Add(folder);
         }
 
         void PickTheme(string id)
@@ -445,6 +610,7 @@ namespace QLock
             if (id == cfg.ThemeId) return;
             cfg.ThemeId = id;
             PaintThemes();
+            RefreshPreview();
             SaveNow("已保存，下次锁屏生效");
         }
 
