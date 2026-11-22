@@ -25,6 +25,21 @@
 
 namespace {
 
+// 这块屏的缩放比例。shcore 拿不到就退回系统 DPI，最后保底 1.0。
+float DpiScaleForMonitor(HMONITOR mon) {
+    typedef HRESULT(WINAPI* GetDpiForMonitorFn)(HMONITOR, int, UINT*, UINT*);
+    static GetDpiForMonitorFn fn = []() -> GetDpiForMonitorFn {
+        HMODULE lib = LoadLibraryW(L"shcore.dll");
+        return lib ? (GetDpiForMonitorFn)GetProcAddress(lib, "GetDpiForMonitor") : nullptr;
+    }();
+    UINT x = 0, y = 0;
+    if (fn && mon && SUCCEEDED(fn(mon, 0 /* MDT_EFFECTIVE_DPI */, &x, &y)) && x) return x / 96.0f;
+    typedef UINT(WINAPI* GetDpiForSystemFn)();
+    static GetDpiForSystemFn sys = (GetDpiForSystemFn)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForSystem");
+    UINT dpi = sys ? sys() : 96;
+    return (dpi ? dpi : 96) / 96.0f;
+}
+
 // 后台线程查更新后的结果，整块交给主线程处理。
 struct CheckResult {
     std::wstring status;
@@ -183,9 +198,8 @@ public:
     static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
     bool Create(HWND ownerWnd);
+    void ApplyScale(float s);
     void DestroyAll();
-
-    float Sx(float logical) const { return logical * scale; }
 
     D2D1_ROUNDED_RECT Round(const Rect& r, float radius) {
         float rad = gfx::Radius(radius, r.H());
@@ -775,8 +789,8 @@ void Settings::LayoutUnlock(float left, float right, float top, float bottom) {
     gfx::Text(dc, fBody, L"Windows 账户", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
     gfx::Text(dc, fSmall, L"QLock 不碰系统账户，只盖一层自己的锁屏", D2D1::RectF(left + 200, y, right, y + RowH), Color(kTextMuted));
     y += RowH + 8;
-    gfx::Text(dc, fSmall, L"改完点「设置」，密码按 PBKDF2-SHA256 存，另存一份 DPAPI 加密的明文只给这里回显；恢复码同样只存 hash，用过一次就清掉。",
-              D2D1::RectF(left, y, right, y + 40), Color(kTextMuted));
+    gfx::TextWrapped(dc, fSmall, L"改完点「设置」，密码按 PBKDF2-SHA256 存，另存一份 DPAPI 加密的明文只给这里回显；恢复码同样只存 hash，用过一次就清掉。",
+                     D2D1::RectF(left, y, right, y + 40), Color(kTextMuted));
 }
 
 void Settings::LayoutStart(float left, float right, float top, float bottom) {
@@ -1293,12 +1307,10 @@ bool Settings::Create(HWND ownerWnd) {
         app::Log(L"settings: gfx init failed");
         return false;
     }
-    scale = 1.0f;
-    {
-        typedef UINT(WINAPI* GetDpiForSystemFn)();
-        GetDpiForSystemFn fn = (GetDpiForSystemFn)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForSystem");
-        if (fn) { UINT dpi = fn(); if (dpi) scale = dpi / 96.0f; }
-    }
+    // 按窗口将要出现的那块屏算缩放，副屏缩放不同也不会开成错的尺寸。
+    HMONITOR mon = MonitorFromWindow(ownerWnd && IsWindow(ownerWnd) ? ownerWnd : GetDesktopWindow(),
+                                     MONITOR_DEFAULTTONEAREST);
+    scale = DpiScaleForMonitor(mon);
 
     if (!GetClassInfoW(app::inst, kClass, nullptr)) {
         WNDCLASSEXW wc = {};
@@ -1321,8 +1333,9 @@ bool Settings::Create(HWND ownerWnd) {
         sx = o.left + ((o.right - o.left) - ww) / 2;
         sy = o.top + ((o.bottom - o.top) - wh) / 2;
     } else {
-        RECT work;
-        SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+        MONITORINFO mi = { sizeof(mi) };
+        RECT work = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
+        if (GetMonitorInfoW(mon, &mi)) work = mi.rcWork;
         sx = work.left + ((work.right - work.left) - ww) / 2;
         sy = work.top + ((work.bottom - work.top) - wh) / 2;
     }
@@ -1348,7 +1361,28 @@ bool Settings::Create(HWND ownerWnd) {
     SetForegroundWindow(hwnd);
     SetFocus(hwnd);
     SetTimer(hwnd, 4, 500, nullptr);
+
+    // 测试用：QLOCK_FORCE_DPI=144 直接按 150% 起一遍，不用真去改系统缩放。
+    wchar_t forced[16] = {};
+    if (GetEnvironmentVariableW(L"QLOCK_FORCE_DPI", forced, 16) > 0) {
+        int v = _wtoi(forced);
+        if (v >= 96) ApplyScale(v / 96.0f);
+    }
     return true;
+}
+
+// 换缩放：窗口按新的比例重算大小，D2D 也换 DPI，之后画的坐标仍然是逻辑像素。
+void Settings::ApplyScale(float s) {
+    if (s <= 0) s = 1.0f;
+    scale = s;
+    if (dc) dc->SetDpi(96.0f * s, 96.0f * s);
+    RECT frame = { 0, 0, (LONG)(WinW * s), (LONG)(WinH * s) };
+    AdjustWindowRectEx(&frame, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, FALSE, 0);
+    RECT cur = {};
+    GetWindowRect(hwnd, &cur);
+    SetWindowPos(hwnd, nullptr, cur.left, cur.top, frame.right - frame.left, frame.bottom - frame.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    Invalidate();
 }
 
 void Settings::DestroyAll() {
@@ -1443,6 +1477,10 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_ERASEBKGND:
         return 1;
+    case WM_DPICHANGED:
+        // 窗口被拖到缩放不同的屏上：按新缩放重算窗口大小，画面整体跟着放大缩小。
+        self->ApplyScale((float)HIWORD(wp) / 96.0f);
+        return 0;
     case WM_SIZE:
         if (wp != SIZE_MINIMIZED) self->Resize();
         return 0;

@@ -50,6 +50,15 @@ public:
         return true;
     }
 
+    // 显示器换了分辨率或插拔屏时把窗口挪到新的整块屏上。
+    void SetBounds(const RECT& rect) {
+        MoveWindow(hwnd, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
+        UpdateScale();
+        if (dc) dc->SetDpi(96.0f * scale, 96.0f * scale);
+        Resize();
+        InvalidateRect(hwnd, nullptr, FALSE);
+    }
+
     void UpdateScale() {
         UINT dpi = 96;
         typedef UINT(WINAPI* GetDpiForWindowFn)(HWND);
@@ -316,6 +325,10 @@ LRESULT CALLBACK Overlay::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
     }
+    case WM_DISPLAYCHANGE:
+        // 每块屏都会收到一次，函数内部做了节流。
+        LockScreensLayoutChanged();
+        return 0;
     case WM_DPICHANGED:
         self->UpdateScale();
         self->view.Reload(self->dc);
@@ -366,6 +379,17 @@ static HBITMAP CaptureScreen(const RECT& rc) {
     return bmp;
 }
 
+// 每块屏的整块矩形，按系统给的顺序（主屏在前）。
+static std::vector<RECT> MonitorRects() {
+    std::vector<RECT> rects;
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR mon, HDC, LPRECT, LPARAM data) -> BOOL {
+        MONITORINFO mi = { sizeof(mi) };
+        if (GetMonitorInfoW(mon, &mi)) ((std::vector<RECT>*)data)->push_back(mi.rcMonitor);
+        return TRUE;
+    }, (LPARAM)&rects);
+    return rects;
+}
+
 void LockScreensCreate() {
     if (!g_windows.empty()) return;
     if (!gfx::Init()) {
@@ -382,12 +406,7 @@ void LockScreensCreate() {
         RegisterClassExW(&wc);
     }
 
-    std::vector<RECT> rects;
-    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR mon, HDC, LPRECT, LPARAM data) -> BOOL {
-        MONITORINFO mi = { sizeof(mi) };
-        if (GetMonitorInfoW(mon, &mi)) ((std::vector<RECT>*)data)->push_back(mi.rcMonitor);
-        return TRUE;
-    }, (LPARAM)&rects);
+    std::vector<RECT> rects = MonitorRects();
 
     // 先抓屏再建窗口，否则后面几块屏会把自己刚盖上去的黑窗抓进去。
     const bool snapshot = app::cfg.BackgroundSnapshot && app::cfg.BackgroundImage.empty();
@@ -439,11 +458,30 @@ void LockScreensSetError(const std::wstring& text) {
     }
 }
 
+// 分辨率变了、插拔了屏：把窗口重新铺到每块屏上，多出来的屏补窗口、少了的收掉。
 void LockScreensLayoutChanged() {
+    static DWORD last = 0;
+    DWORD now = GetTickCount();
+    if (now - last < 500) return;   // 每块屏都会收到 WM_DISPLAYCHANGE
+    last = now;
+
+    const std::vector<RECT> rects = MonitorRects();
+    if (rects.empty()) return;
+    while (g_windows.size() > rects.size()) {
+        Overlay* w = g_windows.back();
+        w->Destroy();
+        delete w;
+        g_windows.pop_back();
+    }
+    for (size_t i = 0; i < g_windows.size(); ++i) g_windows[i]->SetBounds(rects[i]);
+    for (size_t i = g_windows.size(); i < rects.size(); ++i) {
+        Overlay* w = new Overlay();
+        if (w->Create(rects[i], kClass)) g_windows.push_back(w); else delete w;
+    }
     for (Overlay* w : g_windows) {
         w->view.theme = themes::Find(app::cfg.ThemeId);
-        w->UpdateScale();
         w->view.Reload(w->dc);
         InvalidateRect(w->hwnd, nullptr, FALSE);
     }
+    app::Log(L"layout changed, screens=%d", (int)g_windows.size());
 }

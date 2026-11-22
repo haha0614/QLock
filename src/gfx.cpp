@@ -96,6 +96,14 @@ void StrokeRound(ID2D1DeviceContext* dc, const D2D1_ROUNDED_RECT& r, D2D1_COLOR_
     }
 }
 
+void TextWrapped(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
+                 const D2D1_RECT_F& box, D2D1_COLOR_F c) {
+    if (!fmt || s.empty()) return;
+    fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+    Text(dc, fmt, s, box, c);
+    fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+}
+
 void Text(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
           const D2D1_RECT_F& box, D2D1_COLOR_F c) {
     if (!fmt || s.empty()) return;

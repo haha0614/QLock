@@ -7,11 +7,15 @@
 #include <wincodec.h>
 #include <cstdio>
 
-// 离屏渲染一张锁屏，用来比设置窗里的预览和真锁屏是不是一回事。用法：render <out.png> [宽 高]
+// 离屏渲染一张锁屏，用来比设置窗里的预览和真锁屏是不是一回事。
+// 用法：render <out.png> [宽 高] [recovery|snapshot] [dpi]
+// dpi 用来验高 DPI：同样的 DIP 排版，像素数按 dpi/96 放大，画面应当一模一样。
 int wmain(int argc, wchar_t** argv) {
-    if (argc < 2) { wprintf(L"usage: render <out.png> [w h]\n"); return 2; }
+    if (argc < 2) { wprintf(L"usage: render <out.png> [w h] [recovery|snapshot] [dpi]\n"); return 2; }
     UINT w = argc > 3 ? (UINT)_wtoi(argv[2]) : 1920;
     UINT h = argc > 3 ? (UINT)_wtoi(argv[3]) : 1080;
+    const float dpi = argc > 5 ? (float)_wtoi(argv[5]) : 96.0f;
+    if (dpi <= 0) { wprintf(L"bad dpi\n"); return 2; }
 
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) return 1;
     app::inst = GetModuleHandleW(nullptr);
@@ -20,11 +24,11 @@ int wmain(int argc, wchar_t** argv) {
 
     ID2D1DeviceContext* dc = nullptr;
     if (FAILED(gfx::Device()->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &dc))) return 1;
-    dc->SetDpi(96.0f, 96.0f);
+    dc->SetDpi(dpi, dpi);
 
     D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
         D2D1_BITMAP_OPTIONS_TARGET, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-        96.0f, 96.0f);
+        dpi, dpi);
     ID2D1Bitmap1* target = nullptr;
     if (FAILED(dc->CreateBitmap(D2D1::SizeU(w, h), nullptr, 0, &props, &target))) { wprintf(L"target failed\n"); return 1; }
     dc->SetTarget(target);
@@ -62,7 +66,8 @@ int wmain(int argc, wchar_t** argv) {
     view.Reload(dc);
 
     dc->BeginDraw();
-    view.Draw(dc, (float)w, (float)h);
+    // 窗口那边传的是 DIP（像素数除以缩放），这里照着算。
+    view.Draw(dc, (float)w * 96.0f / dpi, (float)h * 96.0f / dpi);
     dc->EndDraw();
     dc->SetTarget(nullptr);
 

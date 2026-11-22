@@ -29,6 +29,9 @@ void StrokeRound(ID2D1DeviceContext* dc, const D2D1_ROUNDED_RECT& r, D2D1_COLOR_
 // 单行文字，按 rect 的左上角开始排，垂直居中。
 void Text(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
           const D2D1_RECT_F& box, D2D1_COLOR_F c);
+// 允许换行的版本：窄窗口或高 DPI 下长句子要能折行，不然右端会被裁掉。
+void TextWrapped(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
+                 const D2D1_RECT_F& box, D2D1_COLOR_F c);
 float Measure(IDWriteTextFormat* fmt, const std::wstring& s);
 
 // 字体名留空或系统里没有时退回微软雅黑 UI。
