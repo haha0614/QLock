@@ -2,6 +2,7 @@
 #include "qlock.h"
 #include "resource.h"
 #include "settings_window.h"
+#include "updater.h"
 #include <shellapi.h>
 #include <objbase.h>
 #include <vector>
@@ -270,6 +271,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     }
 
     app::LoadConfig();
+    updater::CleanupOld();  // 上次升级留下的 .old 和临时目录，这时候删最安全
 
     // 开了「以管理员身份启动」就带 --elevated 重新拉起自己；用户拒绝提权就继续跑。
     if (app::cfg.RunElevated && !HasArg(args, L"--elevated", nullptr) && !IsElevated()) {
