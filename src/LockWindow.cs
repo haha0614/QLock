@@ -97,7 +97,7 @@ namespace QLock
             dateText.Visibility = clockText.Visibility;
             column.Children.Add(dateText);
 
-            Border card = new Border();
+            Border card = new Squircle();
             if (theme.Card.Show)
             {
                 card.Width = theme.Card.Width;

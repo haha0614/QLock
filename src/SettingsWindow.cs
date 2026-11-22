@@ -183,7 +183,7 @@ namespace QLock
         static ControlTemplate NavTemplate()
         {
             ControlTemplate template = new ControlTemplate(typeof(Button));
-            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Border));
+            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Squircle));
             frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(Design.RadiusControl));
             frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
             frame.SetValue(Border.PaddingProperty, new Thickness(Design.Gap12, 0, Design.Gap12, 0));
@@ -408,7 +408,7 @@ namespace QLock
 
         FrameworkElement BuildPreviewArea()
         {
-            previewHost = new Border();
+            previewHost = new Squircle();
             previewHost.Height = 160;
             previewHost.CornerRadius = new CornerRadius(Design.RadiusCard);
             previewHost.BorderThickness = new Thickness(1);
@@ -482,7 +482,7 @@ namespace QLock
             date.Visibility = clock.Visibility;
             column.Children.Add(date);
 
-            Border card = new Border();
+            Border card = new Squircle();
             if (t.Card.Show)
             {
                 card.Width = t.Card.Width;
@@ -522,7 +522,7 @@ namespace QLock
             body.Children.Add(sub);
 
             bool underline = string.Equals(t.Input.Kind, "underline", StringComparison.OrdinalIgnoreCase);
-            Border input = new Border();
+            Border input = new Squircle();
             input.Height = t.Input.Height;
             if (underline)
             {
