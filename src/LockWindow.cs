@@ -218,10 +218,12 @@ namespace QLock
             back.MouseLeftButtonUp += delegate { ShowRecovery(false); };
             recoveryPanel.Children.Add(back);
 
+            // 没有提示时不占位置，卡片底部就不会多出一块空白。
             messageBlock = Ui.Text("", 12, Ui.Error, FontWeights.Normal);
             messageBlock.Height = 18;
             messageBlock.Margin = new Thickness(0, 10, 0, 0);
             messageBlock.TextAlignment = TextAlignment.Center;
+            messageBlock.Visibility = Visibility.Collapsed;
             body.Children.Add(messageBlock);
 
             root.Children.Add(column);
@@ -357,6 +359,7 @@ namespace QLock
             passwordPanel.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
             recoveryPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             messageBlock.Text = "";
+            messageBlock.Visibility = Visibility.Collapsed;
             Win.Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(FocusActiveInput));
         }
 
@@ -370,6 +373,7 @@ namespace QLock
         {
             messageBlock.Text = text;
             messageBlock.Foreground = isError ? Ui.Error : Ui.Good;
+            messageBlock.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
         }
 
         public void ClearInput()
