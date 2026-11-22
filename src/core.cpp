@@ -311,6 +311,16 @@ bool VerifyRecovery(const std::wstring& code) {
     for (size_t i = 0; i < actual.size(); ++i) diff |= (BYTE)(actual[i] ^ expect[i]);
     return diff == 0;
 }
+// .NET 的 Ticks 从 0001-01-01 起算，FILETIME 从 1601-01-01 起算，差 504911232000000000 个 100 纳秒。
+long long UtcTicksNow() {
+    FILETIME ft = {};
+    GetSystemTimeAsFileTime(&ft);
+    ULARGE_INTEGER value;
+    value.LowPart = ft.dwLowDateTime;
+    value.HighPart = ft.dwHighDateTime;
+    return (long long)value.QuadPart + 504911232000000000LL;
+}
+
 } // namespace app
 
 namespace json {

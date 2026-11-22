@@ -82,6 +82,7 @@ bool HasRecovery();
 bool VerifyRecovery(const std::wstring& code);
 
 std::wstring ClockFontName();    // 时钟字体没开或没挑过就回落界面字体
+long long UtcTicksNow();         // 和 .NET DateTime.UtcNow.Ticks 同一把尺子，配置里存的是它
 std::wstring UiFontName();
 
 void RequestLock();

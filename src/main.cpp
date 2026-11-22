@@ -5,6 +5,7 @@
 #include "updater.h"
 #include <shellapi.h>
 #include <objbase.h>
+#include <thread>
 #include <vector>
 #include <string>
 #include <cstdlib>
@@ -15,7 +16,15 @@ const UINT WM_APP_TRAY = WM_APP + 1;
 const UINT WM_APP_LOCK = WM_APP + 2;
 const UINT WM_APP_UNLOCK = WM_APP + 3;
 const UINT WM_APP_QUIT = WM_APP + 4;
+const UINT WM_APP_UPDATE = WM_APP + 20;
 const UINT kShowSettings = RegisterWindowMessageW(L"QLock.ShowSettings");
+
+// 启动时静默查一次更新的结果。
+struct AutoUpdate {
+    std::wstring tag;
+    bool ok = false;
+    bool newer = false;
+};
 
 #pragma comment(lib, "advapi32.lib")
 
@@ -157,6 +166,27 @@ void DoQuit() {
     DestroyWindow(g_main);
 }
 
+// 一天最多自动查一次；查到有新版本就把设置窗开在关于页。
+void AutoCheckUpdate() {
+    const long long day = 24LL * 3600LL * 10000000LL;
+    if (app::cfg.LastUpdateCheckTicks > 0 && app::UtcTicksNow() - app::cfg.LastUpdateCheckTicks < day) return;
+    HWND target = g_main;
+    std::thread([target]() {
+        std::wstring tag, page, error;
+        AutoUpdate* info = new AutoUpdate();
+        if (!updater::Check(&tag, &page, &error)) {
+            app::Log(L"update: auto check failed: %s", error.c_str());
+        } else {
+            info->ok = true;
+            info->tag = tag;
+            info->newer = updater::IsNewer(tag, updater::CurrentVersion());
+            app::Log(L"update: latest=%s current=%s newer=%d", tag.c_str(), updater::CurrentVersion().c_str(),
+                     info->newer ? 1 : 0);
+        }
+        if (!PostMessageW(target, WM_APP_UPDATE, 0, (LPARAM)info)) delete info;
+    }).detach();
+}
+
 bool IdleReached(int minutes) {
     if (minutes <= 0) return false;
     LASTINPUTINFO li = { sizeof(li) };
@@ -201,6 +231,20 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
         return 0;
+    case WM_APP_UPDATE: {
+        AutoUpdate* info = (AutoUpdate*)lp;
+        if (info) {
+            if (info->ok) {
+                app::cfg.LastUpdateCheckTicks = app::UtcTicksNow();
+                app::SaveConfig();
+                if (info->newer && !info->tag.empty() && info->tag != app::cfg.SkippedVersion) {
+                    SettingsShowUpdate(nullptr, info->tag);
+                }
+            }
+            delete info;
+        }
+        return 0;
+    }
     case WM_COMMAND:
         switch (LOWORD(wp)) {
         case ID_MENU_LOCK: DoLock(); return 0;
@@ -320,6 +364,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         if (seconds > 0 && (g_lifeSeconds == 0 || seconds < g_lifeSeconds)) g_lifeSeconds = seconds;
     }
     if (g_lifeSeconds > 0) g_lifeTimer = SetTimer(g_main, 2, 1000, nullptr);
+
+    // 锁屏、设置这类带参数启动不查更新，免得测试和锁屏时跑网络。
+    if (args.empty() || HasArg(args, L"--tray", nullptr) || HasArg(args, L"--elevated", nullptr)) AutoCheckUpdate();
 
     if (HasArg(args, L"--settings", nullptr)) {
         SettingsShow(nullptr);

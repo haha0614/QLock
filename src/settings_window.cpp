@@ -25,8 +25,13 @@
 
 namespace {
 
-// 后台线程查到的版本号，主线程收结果时取走。
-std::wstring g_pendingTag;
+// 后台线程查更新后的结果，整块交给主线程处理。
+struct CheckResult {
+    std::wstring status;
+    std::wstring tag;
+    bool ok = false;
+    bool newer = false;
+};
 
 using gfx::Color;
 
@@ -427,6 +432,7 @@ public:
     void CommitIdle();
     void CheckUpdate();
     void StartDownload();
+    void ApplyAutoUpdate(const std::wstring& tag);
     void PaintFooter(float w, float h, float left, float right);
     void PaintNav(float h);
 
@@ -914,6 +920,17 @@ void Settings::CommitIdle() {
     FlushSave();
 }
 
+// 启动时自动查到了新版：直接开在关于页，按钮已经可以点了。
+void Settings::ApplyAutoUpdate(const std::wstring& tag) {
+    pane = 4;
+    scroll = 0;
+    scrollMax = 0;
+    updateState = U_NEWER;
+    newTag = tag;
+    SetStatus(L"发现新版本 " + tag + L"，点「下载并升级」", false);
+    Invalidate();
+}
+
 // 检查更新走后台线程，主线程只收结果；发现新版就换成「下载并升级」。
 void Settings::CheckUpdate() {
     if (updateState == U_CHECKING || updateState == U_DOWNLOADING) return;
@@ -922,20 +939,21 @@ void Settings::CheckUpdate() {
     HWND target = hwnd;
     std::thread([target]() {
         std::wstring tag, page, error;
-        std::wstring status;
-        bool newer = false;
+        CheckResult* result = new CheckResult();
         if (!updater::Check(&tag, &page, &error)) {
-            status = L"检查更新失败：" + error;
-        } else if (updater::IsNewer(tag, updater::CurrentVersion())) {
-            newer = true;
-            status = tag == app::cfg.SkippedVersion ? L"新版本 " + tag + L" 你之前跳过过，可以在这里直接装"
-                                                    : L"发现新版本 " + tag + L"，点「下载并升级」";
-            g_pendingTag = tag;
+            result->status = L"检查更新失败：" + error;
         } else {
-            status = L"已经是最新版本 " + updater::CurrentVersion();
+            result->ok = true;
+            result->tag = tag;
+            result->newer = updater::IsNewer(tag, updater::CurrentVersion());
+            if (result->newer) {
+                result->status = tag == app::cfg.SkippedVersion ? L"新版本 " + tag + L" 你之前跳过过，可以在这里直接装"
+                                                                : L"发现新版本 " + tag + L"，点「下载并升级」";
+            } else {
+                result->status = L"已经是最新版本 " + updater::CurrentVersion();
+            }
         }
-        std::wstring* text = new std::wstring(status);
-        if (!PostMessageW(target, WM_APP + 5, (WPARAM)text, newer ? 1 : 0)) delete text;
+        if (!PostMessageW(target, WM_APP + 5, (WPARAM)result, 0)) delete result;
     }).detach();
 }
 
@@ -1364,14 +1382,18 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     // 后台线程的检查更新结果：wp=状态文字，lp=下载页（可能为空）。
     if (msg == WM_APP + 5) {
-        std::wstring* text = (std::wstring*)wp;
-        bool newer = lp != 0;
-        if (text) {
-            self->SetStatus(*text, !newer && text->find(L"失败") != std::wstring::npos);
-            delete text;
+        CheckResult* result = (CheckResult*)wp;
+        if (result) {
+            self->SetStatus(result->status, !result->ok);
+            self->updateState = result->newer ? U_NEWER : U_IDLE;
+            if (result->newer) self->newTag = result->tag;
+            if (result->ok) {
+                // 查成功就记下时间，接下来 24 小时启动时不再自动查。
+                app::cfg.LastUpdateCheckTicks = app::UtcTicksNow();
+                app::SaveConfig();
+            }
+            delete result;
         }
-        self->updateState = newer ? U_NEWER : U_IDLE;
-        if (newer) self->newTag = g_pendingTag;
         self->Invalidate();
         return 0;
     }
@@ -1588,6 +1610,25 @@ void SettingsShow(HWND owner) {
     }
     g_settings = s;
     s->Invalidate();
+}
+
+void SettingsShowUpdate(HWND owner, const std::wstring& tag) {
+    if (g_settings && g_settings->hwnd && IsWindow(g_settings->hwnd)) {
+        ShowWindow(g_settings->hwnd, SW_SHOW);
+        SetForegroundWindow(g_settings->hwnd);
+        g_settings->ApplyAutoUpdate(tag);
+        return;
+    }
+    Settings* s = new Settings();
+    if (!s->Create(owner)) {
+        delete s;
+        app::Log(L"settings: window create failed");
+        return;
+    }
+    g_settings = s;
+    s->ApplyAutoUpdate(tag);
+    s->Invalidate();
+    SetForegroundWindow(s->hwnd);
 }
 
 bool SettingsOwnsWindow(HWND hwnd) {
