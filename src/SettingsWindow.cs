@@ -20,7 +20,6 @@ namespace QLock
 
         TextBlock statusText;
         TextBlock headerTitle;
-        TextBlock headerDesc;
         ScrollViewer scroller;
         string currentPane;
 
@@ -100,16 +99,11 @@ namespace QLock
             root.Children.Add(body);
 
             StackPanel head = new StackPanel();
-            head.Margin = new Thickness(28, 22, 28, 6);
+            head.Margin = new Thickness(28, 22, 28, 10);
             body.Children.Add(head);
 
             headerTitle = Ui.Text("", 19, Ui.TextPrimary, FontWeights.SemiBold);
             head.Children.Add(headerTitle);
-
-            headerDesc = Ui.Text("", 12, Ui.TextSecondary, FontWeights.Normal);
-            headerDesc.TextWrapping = TextWrapping.Wrap;
-            headerDesc.Margin = new Thickness(0, 5, 0, 0);
-            head.Children.Add(headerDesc);
 
             scroller = new ScrollViewer();
             scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
@@ -209,17 +203,17 @@ namespace QLock
                 kv.Value.Background = on ? Ui.Fg(46, 96, 150, 250) : Brushes.Transparent;
                 kv.Value.Foreground = on ? Ui.Accent : Ui.TextSecondary;
             }
-            if (id == "unlock") { headerTitle.Text = "解锁方式"; headerDesc.Text = "只用于本程序，和 Windows 账户密码无关，输错不会锁账户。"; }
-            else if (id == "look") { headerTitle.Text = "外观"; headerDesc.Text = "锁屏长什么样。改完下一次锁屏就换过去。"; }
-            else if (id == "start") { headerTitle.Text = "启动与锁定"; headerDesc.Text = "什么时候锁屏、开机要不要自动启动。"; }
-            else if (id == "hard") { headerTitle.Text = "加固"; headerDesc.Text = "锁屏时挡掉常见的系统热键。这不是安全边界。"; }
-            else { headerTitle.Text = "关于"; headerDesc.Text = "版本、更新和文件放在哪。"; }
+            if (id == "unlock") headerTitle.Text = "解锁方式";
+            else if (id == "look") headerTitle.Text = "外观";
+            else if (id == "start") headerTitle.Text = "启动与锁定";
+            else if (id == "hard") headerTitle.Text = "加固";
+            else headerTitle.Text = "关于";
             if (scroller != null) scroller.ScrollToTop();
         }
 
         // ---------- rows ----------
 
-        Border Row(string title, string desc, FrameworkElement control)
+        Border Row(string title, FrameworkElement control)
         {
             Grid g = new Grid();
             g.ColumnDefinitions.Add(new ColumnDefinition());
@@ -230,13 +224,6 @@ namespace QLock
             texts.VerticalAlignment = VerticalAlignment.Center;
             texts.Margin = new Thickness(0, 0, 18, 0);
             texts.Children.Add(Ui.Text(title, 13.5, Ui.TextPrimary, FontWeights.Normal));
-            if (!string.IsNullOrEmpty(desc))
-            {
-                TextBlock d = Ui.Text(desc, 11.5, Ui.TextSecondary, FontWeights.Normal);
-                d.TextWrapping = TextWrapping.Wrap;
-                d.Margin = new Thickness(0, 3, 0, 0);
-                texts.Children.Add(d);
-            }
             g.Children.Add(texts);
 
             NameControl(control, title);
@@ -253,17 +240,10 @@ namespace QLock
             return line;
         }
 
-        Border Block(string title, string desc, FrameworkElement control)
+        Border Block(string title, FrameworkElement control)
         {
             StackPanel s = new StackPanel();
             s.Children.Add(Ui.Text(title, 13.5, Ui.TextPrimary, FontWeights.Normal));
-            if (!string.IsNullOrEmpty(desc))
-            {
-                TextBlock d = Ui.Text(desc, 11.5, Ui.TextSecondary, FontWeights.Normal);
-                d.TextWrapping = TextWrapping.Wrap;
-                d.Margin = new Thickness(0, 3, 0, 0);
-                s.Children.Add(d);
-            }
             NameControl(control, title);
             control.Margin = new Thickness(0, 10, 0, 0);
             control.HorizontalAlignment = HorizontalAlignment.Left;
@@ -333,9 +313,7 @@ namespace QLock
             apply.Click += delegate { ApplyPassword(); };
             pwdRow.Children.Add(apply);
 
-            pane.Children.Add(Row("解锁密码", cfg.HasPassword
-                ? "留空不变，至少 4 位。"
-                : "还没设，至少 4 位。", pwdRow));
+            pane.Children.Add(Row("解锁密码", pwdRow));
 
             recStatus = Ui.Text(!string.IsNullOrEmpty(cfg.RecoveryHash) ? "已设置恢复码。" : "还没有恢复码。",
                 12, Ui.TextSecondary, FontWeights.Normal);
@@ -358,7 +336,7 @@ namespace QLock
             recStack.Children.Add(genRec);
             recStack.Children.Add(recOut);
 
-            pane.Children.Add(Row("恢复码", "忘记密码时用，只显示一次，用过作废。", recStack));
+            pane.Children.Add(Row("恢复码", recStack));
             return pane;
         }
 
@@ -407,15 +385,15 @@ namespace QLock
             themeStack.Children.Add(themeWrap);
             themeStack.Children.Add(openThemes);
 
-            pane.Children.Add(Block("锁屏主题", "内置三套。也可以往文件夹里放自己的 JSON，文件名随意，格式照着样例改。", themeStack));
+            pane.Children.Add(Block("锁屏主题", themeStack));
 
             CheckBox clock = Toggle(cfg.ShowClock);
             Bind(clock, delegate(bool on) { cfg.ShowClock = on; }, "已保存，下次锁屏生效");
-            pane.Children.Add(Row("显示时钟和日期", "锁屏中间上面那一行。", clock));
+            pane.Children.Add(Row("显示时钟和日期", clock));
 
             CheckBox snapshot = Toggle(cfg.BackgroundSnapshot);
             Bind(snapshot, delegate(bool on) { cfg.BackgroundSnapshot = on; }, "已保存，下次锁屏生效");
-            pane.Children.Add(Row("用屏幕截图做模糊背景", "默认纯黑。勾上后锁定那一刻截一张屏，模糊当背景。", snapshot));
+            pane.Children.Add(Row("用屏幕截图做模糊背景", snapshot));
 
             subtitleBox = new TextBox();
             subtitleBox.Width = 190;
@@ -426,7 +404,7 @@ namespace QLock
             {
                 if (e.Key == Key.Enter) { CommitSubtitle(); }
             };
-            pane.Children.Add(Row("提示文字", "解锁输入框上方那句话。", subtitleBox));
+            pane.Children.Add(Row("提示文字", subtitleBox));
 
             return pane;
         }
@@ -491,15 +469,15 @@ namespace QLock
 
             CheckBox winL = Toggle(cfg.InterceptWinL);
             Bind(winL, delegate(bool on) { cfg.InterceptWinL = on; }, "已保存");
-            pane.Children.Add(Row("接管 Win+L", "按 Win+L 时锁 QLock 的屏，不触发 Windows 锁屏。", winL));
+            pane.Children.Add(Row("接管 Win+L", winL));
 
             CheckBox hotkey = Toggle(cfg.CustomHotkeyEnabled);
             Bind(hotkey, delegate(bool on) { cfg.CustomHotkeyEnabled = on; }, "已保存");
-            pane.Children.Add(Row("Ctrl+Alt+L 热键", "程序运行时按这个组合就能锁。", hotkey));
+            pane.Children.Add(Row("Ctrl+Alt+L 热键", hotkey));
 
             CheckBox onStart = Toggle(cfg.LockOnStartup);
             Bind(onStart, delegate(bool on) { cfg.LockOnStartup = on; }, "已保存");
-            pane.Children.Add(Row("程序启动后立即锁定", "开机自启加这一项，登录后马上就是锁屏。", onStart));
+            pane.Children.Add(Row("程序启动后立即锁定", onStart));
 
             idleBox = new TextBox();
             idleBox.Width = 70;
@@ -514,10 +492,10 @@ namespace QLock
             StackPanel idleRow = new StackPanel();
             idleRow.Orientation = Orientation.Horizontal;
             idleRow.Children.Add(idleBox);
-            TextBlock unit = Ui.Label("　分钟");
+            TextBlock unit = Ui.Label("　分钟（0 = 不锁）");
             unit.VerticalAlignment = VerticalAlignment.Center;
             idleRow.Children.Add(unit);
-            pane.Children.Add(Row("空闲自动锁定", "多久没输入就锁屏。0 表示不锁。", idleRow));
+            pane.Children.Add(Row("空闲自动锁定", idleRow));
 
             CheckBox autostart = Toggle(cfg.Autostart == "runkey" || cfg.Autostart == "task");
             autostart.Checked += delegate
@@ -532,17 +510,11 @@ namespace QLock
                 SaveNow("已保存");
                 ApplyAutostart(false);
             };
-            pane.Children.Add(Row("登录时自动启动", "写当前用户的启动项，不用管理员权限。", autostart));
+            pane.Children.Add(Row("登录时自动启动", autostart));
 
             CheckBox elevated = Toggle(cfg.RunElevated);
             Bind(elevated, delegate(bool on) { cfg.RunElevated = on; }, "已保存，下次启动生效");
-            pane.Children.Add(Row("以管理员身份启动", "每次启动弹一次 UAC。取消授权就以普通权限继续跑。", elevated));
-
-            TextBlock note = Ui.Text("三项一起开，登录后会先等 UAC 确认，那几秒桌面是露着的。建议关掉「以管理员身份启动」。",
-                11.5, Ui.TextSecondary, FontWeights.Normal);
-            note.TextWrapping = TextWrapping.Wrap;
-            note.Margin = new Thickness(0, 12, 0, 0);
-            pane.Children.Add(note);
+            pane.Children.Add(Row("以管理员身份启动", elevated));
 
             return pane;
         }
@@ -577,13 +549,7 @@ namespace QLock
 
             CheckBox block = Toggle(cfg.BlockSystemHotkeys);
             Bind(block, delegate(bool on) { cfg.BlockSystemHotkeys = on; }, "已保存");
-            pane.Children.Add(Row("锁定时拦截系统热键", "Win、Alt+Tab、Alt+Esc、Alt+F4、Ctrl+Esc、Ctrl+Shift+Esc 都会被吞掉。", block));
-
-            TextBlock t1 = Ui.Text("锁屏时任务管理器会被压在下面，Ctrl+Alt+Del 里的也一样。要让它真结束不了，去「启动与锁定」勾上「以管理员身份启动」。",
-                11.5, Ui.TextSecondary, FontWeights.Normal);
-            t1.TextWrapping = TextWrapping.Wrap;
-            t1.Margin = new Thickness(0, 14, 0, 0);
-            pane.Children.Add(t1);
+            pane.Children.Add(Row("锁定时拦截系统热键", block));
 
             return pane;
         }
@@ -607,21 +573,14 @@ namespace QLock
             check.Click += delegate { if (onCheckUpdate != null) onCheckUpdate(); };
             verRow.Children.Add(check);
 
-            pane.Children.Add(Row("版本", "每天第一次启动时自动查一次。", verRow));
+            pane.Children.Add(Row("版本", verRow));
 
             string files = "配置：" + ConfigStore.FilePath + "\n" +
                            "日志：" + Log.FilePath + "\n" +
                            "主题：" + Themes.Dir;
             TextBlock loc = Ui.Text(files, 11.5, Ui.TextSecondary, FontWeights.Normal);
             loc.TextWrapping = TextWrapping.Wrap;
-            pane.Children.Add(Block("文件位置", "", loc));
-
-            string env = (Native.IsElevated() ? "以管理员权限运行" : "以普通权限运行") + "，";
-            env += firstRun ? "这是首次设置。" : "改过的选项都已保存。";
-            TextBlock envText = Ui.Text(env, 12, Ui.TextSecondary, FontWeights.Normal);
-            envText.TextWrapping = TextWrapping.Wrap;
-            envText.Margin = new Thickness(0, 14, 0, 0);
-            pane.Children.Add(envText);
+            pane.Children.Add(Block("文件位置", loc));
 
             return pane;
         }
