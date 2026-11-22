@@ -8,7 +8,8 @@ namespace QLock
     // Border 的圆角只能是正圆弧：直边曲率 0，拐角一下跳到 1/r，交界处看得见"起折"。
     // 这里把每个角换成一段超椭圆（|x|^n + |y|^n = r^n，n = 4），曲率从直边的 0
     // 连续长到拐角中点的最大值，也就是连续曲率圆角（squircle）。
-    // 半径等于短边一半时（开关、药丸）退化成胶囊，和原来的正圆弧一致。
+    // 指数不是固定的：半径越接近短边一半，指数从 4 收到 2，形状连续地变成圆形胶囊。
+    // 固定用 4 的话，半径刚过半就会从超椭圆跳成正圆弧，滑块上会出现一个突变。
     public sealed class Squircle : Border
     {
         const int Steps = 20;          // 每个角的采样段数，r=14 时偏差约 0.01px
@@ -87,7 +88,11 @@ namespace QLock
             Rect box = new Rect(inset, inset,
                 Math.Max(0.0, size.Width - inset * 2),
                 Math.Max(0.0, size.Height - inset * 2));
-            double r = Math.Min(radius, Math.Min(box.Width, box.Height) / 2);
+            double limit = Math.Min(box.Width, box.Height) / 2;
+            double r = Math.Min(radius, limit);
+            // 半径占短边一半的比例：0 是直角附近，1 是胶囊。
+            double t = limit <= 0 ? 1 : r / limit;
+            double exponent = 2.0 + (Exponent - 2.0) * (1.0 - t);
             StreamGeometry g = new StreamGeometry();
             using (StreamGeometryContext ctx = g.Open())
             {
@@ -98,30 +103,17 @@ namespace QLock
                     ctx.LineTo(box.BottomRight, true, false);
                     ctx.LineTo(box.BottomLeft, true, false);
                 }
-                else if (r >= Math.Min(box.Width, box.Height) / 2 - 0.01)
-                {
-                    Point start = new Point(box.Left + r, box.Top);
-                    ctx.BeginFigure(start, true, true);
-                    ctx.LineTo(new Point(box.Right - r, box.Top), true, false);
-                    ctx.ArcTo(new Point(box.Right, box.Top + r), new Size(r, r), 0, false, SweepDirection.Clockwise, true, false);
-                    ctx.LineTo(new Point(box.Right, box.Bottom - r), true, false);
-                    ctx.ArcTo(new Point(box.Right - r, box.Bottom), new Size(r, r), 0, false, SweepDirection.Clockwise, true, false);
-                    ctx.LineTo(new Point(box.Left + r, box.Bottom), true, false);
-                    ctx.ArcTo(new Point(box.Left, box.Bottom - r), new Size(r, r), 0, false, SweepDirection.Clockwise, true, false);
-                    ctx.LineTo(new Point(box.Left, box.Top + r), true, false);
-                    ctx.ArcTo(start, new Size(r, r), 0, false, SweepDirection.Clockwise, true, false);
-                }
                 else
                 {
                     ctx.BeginFigure(new Point(box.Left + r, box.Top), true, true);
                     ctx.LineTo(new Point(box.Right - r, box.Top), true, false);
-                    Corner(ctx, box, r, 0);
+                    Corner(ctx, box, r, exponent, 0);
                     ctx.LineTo(new Point(box.Right, box.Bottom - r), true, false);
-                    Corner(ctx, box, r, 1);
+                    Corner(ctx, box, r, exponent, 1);
                     ctx.LineTo(new Point(box.Left + r, box.Bottom), true, false);
-                    Corner(ctx, box, r, 2);
+                    Corner(ctx, box, r, exponent, 2);
                     ctx.LineTo(new Point(box.Left, box.Top + r), true, false);
-                    Corner(ctx, box, r, 3);
+                    Corner(ctx, box, r, exponent, 3);
                 }
             }
             g.Freeze();
@@ -129,9 +121,9 @@ namespace QLock
         }
 
         // 0 右上、1 右下、2 左下、3 左上，每段从上一个直线端点接到下一个
-        static void Corner(StreamGeometryContext ctx, Rect box, double r, int corner)
+        static void Corner(StreamGeometryContext ctx, Rect box, double r, double exponent, int corner)
         {
-            double e = 2.0 / Exponent;
+            double e = 2.0 / exponent;
             double cx = corner == 0 || corner == 1 ? box.Right - r : box.Left + r;
             double cy = corner == 0 || corner == 3 ? box.Top + r : box.Bottom - r;
             PointCollection points = new PointCollection(Steps);
