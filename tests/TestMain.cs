@@ -67,6 +67,8 @@ namespace QLock
             Check(partial.PasswordIterations == Auth.DefaultIterations, "partial config keeps iteration count");
             Check(partial.Autostart == "none", "partial config keeps autostart default");
             Check(partial.LastUpdateCheckTicks == 0 && partial.SkippedVersion == "", "partial config keeps update defaults");
+            Check(!partial.ClockFontEnabled && partial.FontFamily == "" && partial.ClockFont == "", "partial config keeps font defaults");
+            Check(partial.ClockFontName == "", "clock font falls back to the unified font");
             Directory.Delete(dir, true);
             ConfigStore.SetOverrideDir(null);
 

@@ -36,7 +36,7 @@ namespace QLock
             Win.ResizeMode = ResizeMode.NoResize;
             Win.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Win.Background = Ui.Surface;
-            Win.FontFamily = Ui.Font;
+            Win.FontFamily = Ui.FontOf(app.Config.FontFamily);
             Win.Foreground = Ui.TextPrimary;
 
             StackPanel root = new StackPanel();

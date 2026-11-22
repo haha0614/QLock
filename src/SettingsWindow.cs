@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
@@ -39,6 +40,8 @@ namespace QLock
         TextBox subtitleBox;
         WrapPanel themeWrap;
         Border previewHost;
+        Button fontButton;
+        Button clockFontButton;
         readonly Dictionary<string, Button> themeButtons = new Dictionary<string, Button>();
         readonly Dictionary<string, Button> navButtons = new Dictionary<string, Button>();
         readonly Dictionary<string, FrameworkElement> panes = new Dictionary<string, FrameworkElement>();
@@ -59,8 +62,9 @@ namespace QLock
             Win.ResizeMode = ResizeMode.CanMinimize;
             Win.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Win.Background = Ui.Surface;
-            Win.FontFamily = Ui.Font;
+            Win.FontFamily = Ui.FontOf(cfg.FontFamily);
             Win.Foreground = Ui.TextPrimary;
+            Win.Resources[typeof(ScrollBar)] = Ui.SlimScrollBar();
             Win.Closing += OnClosing;
             Win.PreviewKeyDown += delegate(object s, KeyEventArgs e)
             {
@@ -167,7 +171,6 @@ namespace QLock
             b.Height = Design.NavItemHeight;
             b.Margin = new Thickness(0, 2, 0, 2);
             b.FontSize = Design.FontBody;
-            b.FontFamily = Ui.Font;
             b.Cursor = Cursors.Hand;
             b.BorderThickness = new Thickness(0);
             b.Background = Brushes.Transparent;
@@ -420,7 +423,72 @@ namespace QLock
             subtitleRow.Children.Add(subtitleBox);
             pane.Children.Add(Row("提示文字", subtitleRow));
 
+            fontButton = FontButton(cfg.FontFamily, delegate { PickUiFont(); });
+            pane.Children.Add(Row("界面字体", fontButton));
+
+            clockFontButton = FontButton(cfg.ClockFont, delegate { PickClockFont(); });
+            clockFontButton.IsEnabled = cfg.ClockFontEnabled;
+            clockFontButton.Margin = new Thickness(Design.Gap12, 0, 0, 0);
+
+            CheckBox clockFontOn = Toggle(cfg.ClockFontEnabled);
+            clockFontOn.HorizontalAlignment = HorizontalAlignment.Left;
+            NameControl(clockFontOn, "时钟使用单独字体");
+            Bind(clockFontOn, delegate(bool on)
+            {
+                cfg.ClockFontEnabled = on;
+                clockFontButton.IsEnabled = on;
+                RefreshPreview();
+            }, "已保存，下次锁屏生效");
+
+            StackPanel clockFontRow = new StackPanel();
+            clockFontRow.Orientation = Orientation.Horizontal;
+            clockFontRow.Children.Add(clockFontOn);
+            clockFontRow.Children.Add(clockFontButton);
+            pane.Children.Add(Row("时钟字体", clockFontRow));
+
             return pane;
+        }
+
+        Button FontButton(string name, Action onClick)
+        {
+            Button b = Ui.StyledButton("", Design.ControlHeight, Design.RadiusControl, Ui.InputBg, Ui.TextPrimary, Ui.ChipSurface, Ui.InputBorder, Design.FontControl);
+            b.Width = 190;
+            b.Content = FontLabel(name);
+            b.Click += delegate { onClick(); };
+            return b;
+        }
+
+        static TextBlock FontLabel(string name)
+        {
+            TextBlock t = new TextBlock();
+            t.Text = FontPicker.Label(name);
+            t.TextTrimming = TextTrimming.CharacterEllipsis;
+            return t;
+        }
+
+        void PickUiFont()
+        {
+            string picked;
+            try { picked = FontPicker.Pick(Win, cfg.FontFamily, Ui.FontOf(cfg.FontFamily)); }
+            catch (Exception ex) { Log.Write("font picker failed: " + ex); SetStatus("打开字体列表失败：" + ex.Message, true); return; }
+            if (picked == null) return;
+            cfg.FontFamily = picked;
+            Win.FontFamily = Ui.FontOf(picked);
+            fontButton.Content = FontLabel(picked);
+            RefreshPreview();
+            SaveNow("字体已换，界面和锁屏都用它");
+        }
+
+        void PickClockFont()
+        {
+            string picked;
+            try { picked = FontPicker.Pick(Win, cfg.ClockFont, Ui.FontOf(cfg.FontFamily)); }
+            catch (Exception ex) { Log.Write("font picker failed: " + ex); SetStatus("打开字体列表失败：" + ex.Message, true); return; }
+            if (picked == null) return;
+            cfg.ClockFont = picked;
+            clockFontButton.Content = FontLabel(picked);
+            RefreshPreview();
+            SaveNow("时钟字体已换，下次锁屏生效");
         }
 
         FrameworkElement BuildPreviewArea()
@@ -447,6 +515,7 @@ namespace QLock
             root.Height = 408;
             root.ClipToBounds = true;
             root.Background = Ui.BrushOf(t.Background.Color, Brushes.Black);
+            root.SetValue(TextBlock.FontFamilyProperty, Ui.FontOf(cfg.FontFamily));
 
             if (cfg.BackgroundSnapshot)
             {
@@ -488,6 +557,7 @@ namespace QLock
             bool showClock = cfg.ShowClock && t.Clock.Show;
             TextBlock clock = Ui.Text(DateTime.Now.ToString("HH:mm"), t.Clock.Size,
                 Ui.BrushOf(t.Clock.Color, Brushes.White), FontWeight.FromOpenTypeWeight(t.Clock.Weight));
+            clock.FontFamily = Ui.FontOf(cfg.ClockFontName);
             clock.HorizontalAlignment = HorizontalAlignment.Center;
             clock.Visibility = showClock ? Visibility.Visible : Visibility.Collapsed;
             column.Children.Add(clock);

@@ -32,6 +32,9 @@ namespace QLock
         [DataMember] public bool ShowSubtitle = true;
         [DataMember] public string Subtitle = "输入密码解锁";
         [DataMember] public string ThemeId = "fluent";
+        [DataMember] public string FontFamily = "";
+        [DataMember] public bool ClockFontEnabled = false;
+        [DataMember] public string ClockFont = "";
 
         [DataMember] public long LastUpdateCheckTicks = 0;
         [DataMember] public string SkippedVersion = "";
@@ -59,11 +62,20 @@ namespace QLock
             ShowSubtitle = true;
             Subtitle = "输入密码解锁";
             ThemeId = "fluent";
+            FontFamily = "";
+            ClockFontEnabled = false;
+            ClockFont = "";
             LastUpdateCheckTicks = 0;
             SkippedVersion = "";
         }
 
         public bool HasPassword { get { return !string.IsNullOrEmpty(PasswordHash) && !string.IsNullOrEmpty(PasswordSalt); } }
+
+        // 时钟单独字体没开、或者没挑过，就用界面字体。
+        public string ClockFontName
+        {
+            get { return ClockFontEnabled && !string.IsNullOrEmpty(ClockFont) ? ClockFont : FontFamily; }
+        }
 
         public AppConfig Clone()
         {

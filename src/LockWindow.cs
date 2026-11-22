@@ -46,6 +46,7 @@ namespace QLock
             theme = Themes.Find(cfg.ThemeId);
 
             Win = new Window();
+            Win.FontFamily = Ui.FontOf(cfg.FontFamily);
             Win.WindowStyle = WindowStyle.None;
             Win.ResizeMode = ResizeMode.NoResize;
             Win.ShowInTaskbar = false;
@@ -87,6 +88,7 @@ namespace QLock
 
             Brush clockBrush = Ui.BrushOf(theme.Clock.Color, Brushes.White);
             clockText = Ui.Text("", theme.Clock.Size, clockBrush, FontWeight.FromOpenTypeWeight(theme.Clock.Weight));
+            clockText.FontFamily = Ui.FontOf(cfg.ClockFontName);
             clockText.HorizontalAlignment = HorizontalAlignment.Center;
             clockText.Visibility = (cfg.ShowClock && theme.Clock.Show) ? Visibility.Visible : Visibility.Collapsed;
             column.Children.Add(clockText);

@@ -11,6 +11,42 @@ namespace QLock
     {
         public static readonly FontFamily Font = new FontFamily("Microsoft YaHei UI, Segoe UI");
 
+        // 配置里存的是字体名；空或者系统里没有这个名字就回落默认，不让一个坏值把界面搞崩。
+        public static FontFamily FontOf(string name)
+        {
+            if (name == null || name.Trim().Length == 0) return Font;
+            try
+            {
+                return new FontFamily(name);
+            }
+            catch (Exception)
+            {
+                return Font;
+            }
+        }
+
+        // 深色滚动条：默认那个浅灰带箭头的样子放在深色窗口里太扎眼。
+        public static Style SlimScrollBar()
+        {
+            const string xaml =
+                "<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'"
+                + " xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='ScrollBar'>"
+                + "<Setter Property='Width' Value='10'/>"
+                + "<Setter Property='Background' Value='Transparent'/>"
+                + "<Setter Property='Template'><Setter.Value>"
+                + "<ControlTemplate TargetType='ScrollBar'><Grid Background='Transparent'>"
+                + "<Track x:Name='PART_Track' IsDirectionReversed='true'>"
+                + "<Track.DecreaseRepeatButton><RepeatButton Command='ScrollBar.PageUpCommand' Opacity='0' Focusable='False' IsTabStop='False'/></Track.DecreaseRepeatButton>"
+                + "<Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType='Thumb'>"
+                + "<Border x:Name='bd' Background='#44FFFFFF' CornerRadius='4' Margin='2,0,2,0'/>"
+                + "<ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='bd' Property='Background' Value='#88FFFFFF'/></Trigger></ControlTemplate.Triggers>"
+                + "</ControlTemplate></Thumb.Template></Thumb></Track.Thumb>"
+                + "<Track.IncreaseRepeatButton><RepeatButton Command='ScrollBar.PageDownCommand' Opacity='0' Focusable='False' IsTabStop='False'/></Track.IncreaseRepeatButton>"
+                + "</Track></Grid></ControlTemplate>"
+                + "</Setter.Value></Setter></Style>";
+            return (Style)System.Windows.Markup.XamlReader.Parse(xaml);
+        }
+
         public static SolidColorBrush Fg(byte a, byte r, byte g, byte b)
         {
             SolidColorBrush br = new SolidColorBrush(Color.FromArgb(a, r, g, b));
@@ -48,7 +84,6 @@ namespace QLock
             tb.FontSize = size;
             tb.Foreground = brush;
             tb.FontWeight = weight;
-            tb.FontFamily = Font;
             return tb;
         }
 
@@ -69,7 +104,6 @@ namespace QLock
 
         public static void StyleInput(Control c, bool multiline, double height, double radius, Brush background, Brush borderBrush, Brush foreground, double fontSize)
         {
-            c.FontFamily = Font;
             c.FontSize = fontSize;
             c.Foreground = foreground;
             c.BorderThickness = new Thickness(1);
@@ -102,7 +136,6 @@ namespace QLock
             b.Content = text;
             b.Height = Design.ControlHeight;
             b.FontSize = Design.FontControl;
-            b.FontFamily = Font;
             b.Cursor = Cursors.Hand;
             b.Foreground = Brushes.White;
             b.BorderThickness = new Thickness(0);
@@ -141,7 +174,6 @@ namespace QLock
             b.Content = text;
             b.Height = height;
             b.FontSize = fontSize;
-            b.FontFamily = Font;
             b.Cursor = Cursors.Hand;
             b.Foreground = foreground;
             b.BorderThickness = new Thickness(border == null ? 0 : 1);
