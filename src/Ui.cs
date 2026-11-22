@@ -126,6 +126,14 @@ namespace QLock
             host.SetValue(UIElement.FocusableProperty, false);
             border.AppendChild(host);
             template.VisualTree = border;
+
+            // 禁用时整块压暗，不然自定义模板看不出动静。
+            Trigger off = new Trigger();
+            off.Property = UIElement.IsEnabledProperty;
+            off.Value = false;
+            off.Setters.Add(new Setter(UIElement.OpacityProperty, 0.4, "bg"));
+            template.Triggers.Add(off);
+
             c.Template = template;
             if (!multiline) c.Height = height;
         }
@@ -201,6 +209,12 @@ namespace QLock
                 over.Setters.Add(new Setter(Border.BackgroundProperty, hover, "bg"));
                 template.Triggers.Add(over);
             }
+
+            Trigger off = new Trigger();
+            off.Property = UIElement.IsEnabledProperty;
+            off.Value = false;
+            off.Setters.Add(new Setter(UIElement.OpacityProperty, 0.4, "bg"));
+            template.Triggers.Add(off);
 
             b.Template = template;
             return b;
