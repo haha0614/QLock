@@ -71,6 +71,7 @@ namespace QLock
             Check(partial.LastUpdateCheckTicks == 0 && partial.SkippedVersion == "", "partial config keeps update defaults");
             Check(!partial.ClockFontEnabled && partial.FontFamily == "" && partial.ClockFont == "", "partial config keeps font defaults");
             Check(partial.ClockFontName == "", "clock font falls back to the unified font");
+            Check(partial.BackgroundImage == "" && partial.CornerRadius < 0 && partial.BlurRadius < 0 && partial.MaskOpacity < 0, "partial config keeps background and slider defaults");
             Directory.Delete(dir, true);
             ConfigStore.SetOverrideDir(null);
 

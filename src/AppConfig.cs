@@ -38,6 +38,12 @@ namespace QLock
         [DataMember] public bool ClockFontEnabled = false;
         [DataMember] public string ClockFont = "";
 
+        // -1 表示跟主题走；0 以上是用户在设置里拉过的值。
+        [DataMember] public string BackgroundImage = "";
+        [DataMember] public double CornerRadius = -1;
+        [DataMember] public double BlurRadius = -1;
+        [DataMember] public int MaskOpacity = -1;
+
         [DataMember] public long LastUpdateCheckTicks = 0;
         [DataMember] public string SkippedVersion = "";
 
@@ -68,6 +74,10 @@ namespace QLock
             FontFamily = "";
             ClockFontEnabled = false;
             ClockFont = "";
+            BackgroundImage = "";
+            CornerRadius = -1;
+            BlurRadius = -1;
+            MaskOpacity = -1;
             LastUpdateCheckTicks = 0;
             SkippedVersion = "";
         }

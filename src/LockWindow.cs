@@ -16,6 +16,7 @@ namespace QLock
         public Window Win;
         public readonly bool Interactive;
 
+        readonly AppConfig cfg;
         readonly LockTheme theme;
         readonly PasswordBox passwordBox;
         readonly PasswordBox recoveryBox;
@@ -43,6 +44,7 @@ namespace QLock
             screenY = bounds.Y;
             screenW = bounds.Width;
             screenH = bounds.Height;
+            this.cfg = cfg;
             theme = Themes.Find(cfg.ThemeId);
 
             Win = new Window();
@@ -63,17 +65,32 @@ namespace QLock
 
             Grid root = new Grid();
 
-            if (background != null)
+            // 自己挑的背景图优先；没有才用锁那一刻的屏幕截图。
+            ImageSource backdrop = background;
+            bool custom = false;
+            if (backdrop == null && !string.IsNullOrEmpty(cfg.BackgroundImage))
+            {
+                backdrop = LoadImage(cfg.BackgroundImage, screenW);
+                custom = backdrop != null;
+            }
+
+            double blurRadius = cfg.BlurRadius >= 0 ? cfg.BlurRadius : theme.Background.Blur;
+            int dim = cfg.MaskOpacity >= 0 ? (int)Math.Round(cfg.MaskOpacity * 255.0 / 100.0) : theme.Background.Dim;
+
+            if (backdrop != null)
             {
                 Image img = new Image();
-                img.Source = background;
-                img.Stretch = Stretch.Fill;
-                BlurEffect blur = new BlurEffect();
-                blur.Radius = theme.Background.Blur;
-                blur.KernelType = KernelType.Gaussian;
-                img.Effect = blur;
+                img.Source = backdrop;
+                img.Stretch = custom ? Stretch.UniformToFill : Stretch.Fill;
+                if (blurRadius > 0)
+                {
+                    BlurEffect blur = new BlurEffect();
+                    blur.Radius = blurRadius;
+                    blur.KernelType = KernelType.Gaussian;
+                    img.Effect = blur;
+                }
                 root.Children.Add(img);
-                root.Children.Add(DimLayer(theme.Background.Dim));
+                root.Children.Add(DimLayer(dim));
             }
             else
             {
@@ -103,7 +120,7 @@ namespace QLock
             if (theme.Card.Show)
             {
                 card.Width = theme.Card.Width;
-                card.CornerRadius = new CornerRadius(theme.Card.Radius);
+                card.CornerRadius = new CornerRadius(Radius(theme.Card.Radius));
                 card.Padding = new Thickness(theme.Card.PadH, theme.Card.PadV, theme.Card.PadH, theme.Card.PadV);
                 card.Background = Ui.BrushOf(theme.Card.Bg, Brushes.Transparent);
                 card.BorderThickness = new Thickness(1);
@@ -243,6 +260,33 @@ namespace QLock
             clockTimer.Start();
         }
 
+        // 圆角没自己调过就用主题里的值。
+        double Radius(double themeValue)
+        {
+            return cfg.CornerRadius >= 0 ? cfg.CornerRadius : themeValue;
+        }
+
+        static ImageSource LoadImage(string path, double width)
+        {
+            try
+            {
+                if (!System.IO.File.Exists(path)) return null;
+                BitmapImage bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.DecodePixelWidth = (int)Math.Max(320, width);
+                bmp.UriSource = new Uri(path, UriKind.Absolute);
+                bmp.EndInit();
+                bmp.Freeze();
+                return bmp;
+            }
+            catch (Exception ex)
+            {
+                Log.Write("background image failed: " + ex.Message);
+                return null;
+            }
+        }
+
         FrameworkElement DimLayer(int dim)
         {
             Rectangle rect = new Rectangle();
@@ -273,7 +317,7 @@ namespace QLock
 
         void StyleLockInput(PasswordBox box)
         {
-            Ui.StyleInput(box, false, theme.Input.Height, theme.Input.Radius,
+            Ui.StyleInput(box, false, theme.Input.Height, Radius(theme.Input.Radius),
                 Ui.BrushOf(theme.Input.Bg, Ui.InputBg),
                 Ui.BrushOf(theme.Input.Border, Ui.InputBorder),
                 Ui.BrushOf(theme.Input.Fg, Brushes.White),
@@ -295,7 +339,7 @@ namespace QLock
                 ? Ui.Shade(theme.Button.Bg, Ui.AccentHover)
                 : Ui.BrushOf(theme.Button.Hover, Ui.AccentHover);
             Brush border = outline ? Ui.BrushOf(theme.Button.Border, Ui.ChipBorder) : null;
-            return Ui.StyledButton(text, theme.Button.Height, theme.Button.Radius, bg, fg, hover, border, theme.Button.Size);
+            return Ui.StyledButton(text, theme.Button.Height, Radius(theme.Button.Radius), bg, fg, hover, border, theme.Button.Size);
         }
 
         public void ShowLock()

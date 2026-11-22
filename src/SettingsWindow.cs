@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Microsoft.Win32;
 
 namespace QLock
@@ -42,6 +43,12 @@ namespace QLock
         Squircle previewHost;
         Button fontButton;
         Button clockFontButton;
+        Button bgButton;
+        Slider radiusSlider;
+        Slider blurSlider;
+        Slider maskSlider;
+        bool syncingSliders;
+        DispatcherTimer sliderSave;
         readonly Dictionary<string, Button> themeButtons = new Dictionary<string, Button>();
         readonly Dictionary<string, Button> navButtons = new Dictionary<string, Button>();
         readonly Dictionary<string, FrameworkElement> panes = new Dictionary<string, FrameworkElement>();
@@ -405,6 +412,22 @@ namespace QLock
 
             pane.Children.Add(Block("锁屏主题", themeWrap));
 
+            bgButton = FontButton("", delegate { PickBackground(); });
+            bgButton.Width = 240;
+            bgButton.Content = BackgroundLabel(cfg.BackgroundImage);
+            NameControl(bgButton, "选择背景图片");
+
+            Button bgClear = Ui.StyledButton("恢复纯色", Design.ControlHeight, Design.RadiusControl, Ui.InputBg, Ui.TextSecondary, Ui.ChipSurface, Ui.InputBorder, Design.FontSmall);
+            bgClear.Width = 88;
+            bgClear.Margin = new Thickness(Design.Gap8, 0, 0, 0);
+            bgClear.Click += delegate { SetBackground(""); };
+
+            StackPanel bgRow = new StackPanel();
+            bgRow.Orientation = Orientation.Horizontal;
+            bgRow.Children.Add(bgButton);
+            bgRow.Children.Add(bgClear);
+            pane.Children.Add(Row("背景图片", bgRow));
+
             CheckBox clock = Toggle(cfg.ShowClock);
             Bind(clock, delegate(bool on) { cfg.ShowClock = on; RefreshPreview(); }, "已保存，下次锁屏生效");
             pane.Children.Add(Row("显示时钟和日期", clock));
@@ -412,6 +435,20 @@ namespace QLock
             CheckBox snapshot = Toggle(cfg.BackgroundSnapshot);
             Bind(snapshot, delegate(bool on) { cfg.BackgroundSnapshot = on; RefreshPreview(); }, "已保存，下次锁屏生效");
             pane.Children.Add(Row("用屏幕截图做模糊背景", snapshot));
+
+            // 三个滑块只改用户覆盖值；没拖过就还是 -1，跟主题走。
+            LockTheme look = Themes.Find(cfg.ThemeId);
+            StackPanel radiusRow = SliderControl(cfg.CornerRadius >= 0 ? cfg.CornerRadius : look.Card.Radius, 0, 32, "px",
+                delegate(double v) { cfg.CornerRadius = v; RefreshPreview(); QueueSave(); }, out radiusSlider);
+            pane.Children.Add(Row("圆角", radiusRow));
+
+            StackPanel blurRow = SliderControl(cfg.BlurRadius >= 0 ? cfg.BlurRadius : look.Background.Blur, 0, 60, "px",
+                delegate(double v) { cfg.BlurRadius = v; RefreshPreview(); QueueSave(); }, out blurSlider);
+            pane.Children.Add(Row("模糊度", blurRow));
+
+            StackPanel maskRow = SliderControl(cfg.MaskOpacity >= 0 ? cfg.MaskOpacity : Math.Round(look.Background.Dim * 100.0 / 255.0), 0, 100, "%",
+                delegate(double v) { cfg.MaskOpacity = (int)Math.Round(v); RefreshPreview(); QueueSave(); }, out maskSlider);
+            pane.Children.Add(Row("遮罩透明度", maskRow));
 
             subtitleBox = new TextBox();
             subtitleBox.Width = 190;
@@ -485,6 +522,118 @@ namespace QLock
             return t;
         }
 
+        static TextBlock BackgroundLabel(string path)
+        {
+            TextBlock t = new TextBlock();
+            t.Text = string.IsNullOrEmpty(path) ? "选一张本地图片" : System.IO.Path.GetFileName(path);
+            t.TextTrimming = TextTrimming.CharacterEllipsis;
+            return t;
+        }
+
+        void PickBackground()
+        {
+            System.Windows.Forms.OpenFileDialog dialog = new System.Windows.Forms.OpenFileDialog();
+            dialog.Title = "选择锁屏背景图片";
+            dialog.Filter = "图片|*.jpg;*.jpeg;*.png;*.bmp;*.gif";
+            dialog.CheckFileExists = true;
+            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            SetBackground(dialog.FileName);
+        }
+
+        void SetBackground(string path)
+        {
+            cfg.BackgroundImage = path == null ? "" : path;
+            bgButton.Content = BackgroundLabel(cfg.BackgroundImage);
+            RefreshPreview();
+            SaveNow(cfg.BackgroundImage.Length == 0 ? "背景回到纯色" : "背景图已换，下次锁屏生效");
+        }
+
+        // 滑块 + 右侧数值，拖动时先刷新预览，停手 400ms 才写盘。
+        StackPanel SliderControl(double value, double min, double max, string unit, Action<double> apply, out Slider slider)
+        {
+            Slider s = Ui.Slider(min, max, value, null);
+            TextBlock label = Ui.Text(NumberText(value, unit), Design.FontSmall, Ui.TextSecondary, FontWeights.Normal);
+            label.Width = 48;
+            label.TextAlignment = TextAlignment.Right;
+            label.Margin = new Thickness(Design.Gap12, 0, 0, 0);
+            s.ValueChanged += delegate
+            {
+                label.Text = NumberText(s.Value, unit);
+                if (syncingSliders) return;
+                apply(s.Value);
+            };
+            StackPanel row = new StackPanel();
+            row.Orientation = Orientation.Horizontal;
+            row.Children.Add(s);
+            row.Children.Add(label);
+            slider = s;
+            return row;
+        }
+
+        static string NumberText(double value, string unit)
+        {
+            return ((int)Math.Round(value)).ToString(CultureInfo.InvariantCulture) + (unit.Length == 0 ? "" : " " + unit);
+        }
+
+        void QueueSave()
+        {
+            if (sliderSave == null)
+            {
+                sliderSave = new DispatcherTimer();
+                sliderSave.Interval = TimeSpan.FromMilliseconds(400);
+                sliderSave.Tick += delegate
+                {
+                    sliderSave.Stop();
+                    SaveNow("已保存，下次锁屏生效");
+                };
+            }
+            sliderSave.Stop();
+            sliderSave.Start();
+        }
+
+        double Radius(double themeValue)
+        {
+            return cfg.CornerRadius >= 0 ? cfg.CornerRadius : themeValue;
+        }
+
+        // 换主题时把「跟主题走」的那几个滑块一起带过去；拖过的保持用户值。
+        void SyncSliders()
+        {
+            LockTheme t = Themes.Find(cfg.ThemeId);
+            syncingSliders = true;
+            if (radiusSlider != null && cfg.CornerRadius < 0) radiusSlider.Value = t.Card.Radius;
+            if (blurSlider != null && cfg.BlurRadius < 0) blurSlider.Value = t.Background.Blur;
+            if (maskSlider != null && cfg.MaskOpacity < 0) maskSlider.Value = Math.Round(t.Background.Dim * 100.0 / 255.0);
+            syncingSliders = false;
+        }
+
+        static ImageSource previewImage;
+        static string previewImagePath;
+
+        static ImageSource PreviewImage(string path)
+        {
+            if (path == previewImagePath) return previewImage;
+            previewImagePath = path;
+            previewImage = null;
+            try
+            {
+                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return null;
+                BitmapImage image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.DecodePixelWidth = 960;
+                image.UriSource = new Uri(path, UriKind.Absolute);
+                image.EndInit();
+                image.Freeze();
+                previewImage = image;
+            }
+            catch (Exception ex)
+            {
+                Log.Write("preview background failed: " + ex.Message);
+            }
+            return previewImage;
+        }
+
         void PickUiFont()
         {
             string picked;
@@ -538,33 +687,44 @@ namespace QLock
             root.Background = Ui.BrushOf(t.Background.Color, Brushes.Black);
             root.SetValue(TextBlock.FontFamilyProperty, Ui.FontOf(cfg.FontFamily));
 
-            if (cfg.BackgroundSnapshot)
+            double blurRadius = cfg.BlurRadius >= 0 ? cfg.BlurRadius : t.Background.Blur;
+            int dimAlpha = cfg.MaskOpacity >= 0 ? (int)Math.Round(cfg.MaskOpacity * 255.0 / 100.0) : t.Background.Dim;
+
+            // 自己挑的背景图优先；没挑过才拿当前桌面壁纸顶替截图。
+            ImageSource backdrop = null;
+            if (!string.IsNullOrEmpty(cfg.BackgroundImage)) backdrop = PreviewImage(cfg.BackgroundImage);
+            if (backdrop == null && cfg.BackgroundSnapshot) backdrop = Wallpaper();
+
+            if (backdrop != null)
             {
-                // 预览拿当前桌面壁纸顶替：真锁屏截的是锁那一刻的屏幕，壁纸就是最接近的东西。
-                ImageSource bg = Wallpaper();
-                if (bg != null)
+                Image image = new Image();
+                image.Source = backdrop;
+                image.Stretch = Stretch.UniformToFill;
+                double half = Math.Max(0, blurRadius * 0.5);
+                if (half > 0)
                 {
-                    Image image = new Image();
-                    image.Source = bg;
-                    image.Stretch = Stretch.UniformToFill;
                     BlurEffect blur = new BlurEffect();
-                    blur.Radius = Math.Max(0, t.Background.Blur * 0.5);
+                    blur.Radius = half;
                     blur.KernelType = KernelType.Gaussian;
                     image.Effect = blur;
                     image.Margin = new Thickness(-blur.Radius * 2);
-                    Border frame = new Border();
-                    frame.ClipToBounds = true;
-                    frame.Child = image;
-                    root.Children.Add(frame);
                 }
-                else
-                {
-                    root.Background = new LinearGradientBrush(Color.FromRgb(44, 58, 84), Color.FromRgb(12, 15, 22), 40);
-                }
+                Border frame = new Border();
+                frame.ClipToBounds = true;
+                frame.Child = image;
+                root.Children.Add(frame);
+            }
+            else if (cfg.BackgroundSnapshot)
+            {
+                root.Background = new LinearGradientBrush(Color.FromRgb(44, 58, 84), Color.FromRgb(12, 15, 22), 40);
+            }
+
+            if (backdrop != null || cfg.BackgroundSnapshot)
+            {
                 Color baseColor;
                 if (Ui.TryColor(t.Background.Color, out baseColor))
                 {
-                    byte alpha = (byte)Math.Max(0, Math.Min(255, t.Background.Dim));
+                    byte alpha = (byte)Math.Max(0, Math.Min(255, dimAlpha));
                     Rectangle dim = new Rectangle();
                     dim.Fill = new SolidColorBrush(Color.FromArgb(alpha, baseColor.R, baseColor.G, baseColor.B));
                     root.Children.Add(dim);
@@ -594,7 +754,7 @@ namespace QLock
             if (t.Card.Show)
             {
                 card.Width = t.Card.Width;
-                card.CornerRadius = new CornerRadius(t.Card.Radius);
+                card.CornerRadius = new CornerRadius(Radius(t.Card.Radius));
                 card.Padding = new Thickness(t.Card.PadH, t.Card.PadV, t.Card.PadH, t.Card.PadV);
                 card.Background = Ui.BrushOf(t.Card.Bg, Brushes.Transparent);
                 card.BorderThickness = new Thickness(1);
@@ -642,7 +802,7 @@ namespace QLock
             else
             {
                 input.Background = Ui.BrushOf(t.Input.Bg, Ui.InputBg);
-                input.CornerRadius = new CornerRadius(t.Input.Radius);
+                input.CornerRadius = new CornerRadius(Radius(t.Input.Radius));
                 input.BorderThickness = new Thickness(1);
                 input.BorderBrush = Ui.BrushOf(t.Input.Border, Ui.InputBorder);
             }
@@ -660,7 +820,7 @@ namespace QLock
                 ? Ui.Shade(t.Button.Bg, Ui.AccentHover)
                 : Ui.BrushOf(t.Button.Hover, Ui.AccentHover);
             Brush btnBorder = outline ? Ui.BrushOf(t.Button.Border, Ui.ChipBorder) : null;
-            Button unlock = Ui.StyledButton("解锁", t.Button.Height, t.Button.Radius, btnBg, btnFg, btnHover, btnBorder, t.Button.Size);
+            Button unlock = Ui.StyledButton("解锁", t.Button.Height, Radius(t.Button.Radius), btnBg, btnFg, btnHover, btnBorder, t.Button.Size);
             unlock.Focusable = false;
             unlock.IsHitTestVisible = false;
 
@@ -775,6 +935,7 @@ namespace QLock
             if (id == cfg.ThemeId) return;
             cfg.ThemeId = id;
             PaintThemes();
+            SyncSliders();
             RefreshPreview();
             SaveNow("已保存，下次锁屏生效");
         }

@@ -47,6 +47,41 @@ namespace QLock
             return (Style)System.Windows.Markup.XamlReader.Parse(xaml);
         }
 
+        // 深色滑块：4px 轨道，走过的部分用主色，拇指是白圆点。
+        public static Slider Slider(double min, double max, double value, Action<double> onChanged)
+        {
+            const string xaml =
+                "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'"
+                + " xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='Slider'>"
+                + "<Grid Height='18' Background='Transparent'>"
+                + "<Border Height='4' CornerRadius='2' Background='#1EFFFFFF' VerticalAlignment='Center'/>"
+                + "<Track x:Name='PART_Track' VerticalAlignment='Center'>"
+                + "<Track.DecreaseRepeatButton><RepeatButton Command='Slider.DecreaseLarge' Focusable='False' IsTabStop='False'>"
+                + "<RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Height='4' CornerRadius='2' Background='#3A76E8'/></ControlTemplate></RepeatButton.Template>"
+                + "</RepeatButton></Track.DecreaseRepeatButton>"
+                + "<Track.Thumb><Thumb Width='14' Height='14'>"
+                + "<Thumb.Template><ControlTemplate TargetType='Thumb'><Ellipse Width='14' Height='14' Fill='#FFFFFF'/></ControlTemplate></Thumb.Template>"
+                + "</Thumb></Track.Thumb>"
+                + "<Track.IncreaseRepeatButton><RepeatButton Command='Slider.IncreaseLarge' Focusable='False' IsTabStop='False'>"
+                + "<RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Background='Transparent'/></ControlTemplate></RepeatButton.Template>"
+                + "</RepeatButton></Track.IncreaseRepeatButton>"
+                + "</Track></Grid></ControlTemplate>";
+
+            Slider s = new Slider();
+            s.Minimum = min;
+            s.Maximum = max;
+            s.Value = value;
+            s.Width = 210;
+            s.Height = 18;
+            s.IsMoveToPointEnabled = true;
+            s.Template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(xaml);
+            if (onChanged != null)
+            {
+                s.ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e) { onChanged(e.NewValue); };
+            }
+            return s;
+        }
+
         public static SolidColorBrush Fg(byte a, byte r, byte g, byte b)
         {
             SolidColorBrush br = new SolidColorBrush(Color.FromArgb(a, r, g, b));

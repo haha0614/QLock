@@ -255,7 +255,9 @@ namespace QLock
                 for (int i = 0; i < screens.Length; i++)
                 {
                     Screen screen = screens[i];
-                    BitmapSource bg = cfg.BackgroundSnapshot ? Snapshot.Capture(screen.Bounds, 0.25) : null;
+                    // 挑了背景图就不用再抓屏；图丢了就当没挑过，截图照旧能兜住。
+                    bool custom = !string.IsNullOrEmpty(cfg.BackgroundImage) && System.IO.File.Exists(cfg.BackgroundImage);
+                    BitmapSource bg = (cfg.BackgroundSnapshot && !custom) ? Snapshot.Capture(screen.Bounds, 0.25) : null;
                     bool interactive = screen.Primary || screens.Length == 1;
                     LockWindow lw = new LockWindow(screen.Bounds, bg, cfg, interactive);
                     if (interactive)
