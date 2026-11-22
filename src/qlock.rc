@@ -1,0 +1,5 @@
+// QLock 资源：图标沿用 0.3.0 的蓝色兔子
+#include <windows.h>
+#include "resource.h"
+
+IDI_APP ICON "QLock.ico"
