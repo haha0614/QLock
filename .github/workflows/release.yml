@@ -41,13 +41,10 @@ jobs:
             dist/QLock.exe
             dist/SHA256SUMS.txt
           body: |
-            QLock 0.3.0
+            QLock ${{ github.ref_name }}
 
             - `QLock.exe`：单文件，双击运行，不需要管理员权限
             - `SHA256SUMS.txt`：校验用，`Get-FileHash QLock.exe -Algorithm SHA256` 对照即可
-
-            这一版是 WPF 实现的最后一个版本。之后主分支改用 C++ 原生直绘重写，
-            这份 WPF 源码留在仓库的 `wpf` 分支，需要旧版时可以从那里取。
 
             几点说明：
 

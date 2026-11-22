@@ -1,11 +1,21 @@
 @echo off
 setlocal
-set FW=C:\Windows\Microsoft.NET\Framework64\v4.0.30319
-set ROOT=%~dp0
+set "ROOT=%~dp0"
+where cl.exe >nul 2>nul
+if errorlevel 1 (
+  call "%ROOT%tools\vcvars.cmd"
+  if errorlevel 1 exit /b 1
+)
+if not exist "%ROOT%obj" mkdir "%ROOT%obj"
 if not exist "%ROOT%bin" mkdir "%ROOT%bin"
-"%FW%\csc.exe" /nologo /target:exe /main:QLock.TestMain /out:"%ROOT%bin\QLockTests.exe" /win32manifest:"%ROOT%src\app.manifest" ^
- /r:"%FW%\WPF\PresentationFramework.dll" /r:"%FW%\WPF\PresentationCore.dll" /r:"%FW%\WPF\WindowsBase.dll" ^
- /r:"%FW%\System.Xaml.dll" /r:"%FW%\System.Windows.Forms.dll" /r:"%FW%\System.Drawing.dll" /r:"%FW%\System.Runtime.Serialization.dll" /r:"%FW%\System.Security.dll" ^
- "%ROOT%src\*.cs" "%ROOT%tests\*.cs"
-if errorlevel 1 (echo BUILD FAILED & exit /b 1)
+
+cl /nologo /std:c++17 /utf-8 /EHsc /MT /W3 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN ^
+   /Fo:"%ROOT%obj\\" /Fe:"%ROOT%bin\QLockTests.exe" ^
+   "%ROOT%tests\cpp_smoke.cpp" "%ROOT%src\core.cpp" "%ROOT%src\theme.cpp" ^
+   /link /SUBSYSTEM:CONSOLE
+if errorlevel 1 (
+  echo [test] BUILD FAILED
+  exit /b 1
+)
+
 "%ROOT%bin\QLockTests.exe" %*

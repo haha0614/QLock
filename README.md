@@ -3,7 +3,8 @@
 Windows 上的一个锁屏小工具。锁定之后桌面变成一张模糊的截图，中间是时钟和密码框，输对密码就回桌面。
 密码是 QLock 自己的，和 Windows 账户没有关系，所以不会把 Windows 账户锁住、也不用记两个密码。
 
-版本 0.3.0，MIT 协议，未签名。
+已发布的最新版本是 0.3.0（WPF 实现），MIT 协议，未签名。
+主分支现在是用 C++ 重写的版本，锁屏画面能用了，但设置窗、恢复码、开机自启、更新检查还没搬过来——下面写的是 0.3.0 的完整体验。
 
 ## 截图
 
@@ -28,7 +29,7 @@ Windows 上的一个锁屏小工具。锁定之后桌面变成一张模糊的截
 不想再被这个版本提醒就点「跳过这个版本」。设置窗最下面也能手动查。
 下载的文件放在 `%TEMP%\QLock-update`，替换前的旧 exe 会临时改名成 `QLock.exe.old`，下次启动时删掉。
 
-系统要求：Windows 10 1903 或更高、Windows 11，自带 .NET Framework 4.8 就能跑。
+系统要求：Windows 10 1903 或更高、Windows 11。C++ 版是单个 exe、静态链接运行库，不需要 .NET，也不需要 VC 运行库；0.3.0 的 WPF 版才依赖系统自带的 .NET Framework 4.8。
 
 ## 锁定与解锁
 
@@ -133,19 +134,18 @@ Windows 不允许给已经跑起来的进程提权。不在管理员组的账号
 
 ## 自己编译
 
-不需要 Visual Studio，也不需要 NuGet 或项目文件，直接用系统自带的 csc：
+需要 Visual Studio 2022 的生成工具（MSVC 和 Windows SDK 10）。`tools\vcvars.cmd` 会用 vswhere 找安装位置，找不到就退回默认的 `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools`。
 
-- `build.cmd` 编出 `bin\QLock.exe`
-- `test.cmd` 编完跑 `tests\TestMain.cs` 里的断言
+- `build.cmd` 编出 `bin\QLock.exe`，静态链接运行库，单文件不依赖别的 dll
+- `test.cmd` 编完跑 `tests\cpp_smoke.cpp` 里的断言，全程在临时目录里跑，不碰你自己的配置
 - `pack.cmd` 输出 `dist\QLock.exe` 和 `dist\SHA256SUMS.txt`
 
-语言级别是 C# 5，用不了 `?.`、`nameof` 和字符串插值。
+源码这样分：`main.cpp` 是外壳、单实例、托盘、键盘钩子和命令行，`lock_window.cpp` 是每块屏一个的覆盖层，
+`theme.cpp` 是主题的读入、内置三套、序列化和颜色解析，`core.cpp` 是配置读写、日志、JSON、base64 和 PBKDF2，
+`qlock.h`、`theme.h` 是接口，`qlock.rc` 管图标和版本号。
 
-源码大致这样分：`Program.cs` 是外壳、单实例和命令行，`LockController.cs` 是状态机和键盘钩子，
-`Updater.cs` 查 Release、校验并替换 exe，`UpdateWindow.cs` 是那个更新窗口，
-`LockWindow.cs` 是每块屏一个的全屏窗口，`LockTheme.cs` 是主题的读入和内置三套，`Native.cs` 放 P/Invoke，`Auth.cs` 是 PBKDF2 和恢复码，
-`AppConfig.cs` 是配置和原子写，`Design.cs` 是尺寸和字号的那套数值，`FontPicker.cs` 是选字体的窗口，
-剩下 `Ui.cs`、`SettingsWindow.cs`、`TrayIcon.cs`、`Snapshot.cs`、`Log.cs`。
+界面不用 UI 框架：Direct2D + DirectWrite 直接画到每块屏的 DXGI flip 交换链上，模糊是 D2D 的 GaussianBlur 效果。
 
 图标 `src\QLock.ico` 由 `tools\makeicon.ps1` 生成，用的是 QTools 那只兔子（Lucide rabbit，ISC）。
-版本号只写在 `src\AssemblyInfo.cs` 里，推 v 开头的 tag 会触发 release.yml 发版。
+版本号写在 `src\qlock.rc` 里，推 v 开头的 tag 会触发 release.yml 发版。
+0.3.0 的那套 WPF 源码在 `wpf` 分支，要参考或者回头修它就从那里取。
