@@ -1,5 +1,6 @@
 #include "../src/qlock.h"
 #include "../src/theme.h"
+#include "../src/font_list.h"
 #include <bcrypt.h>
 #include <cstdio>
 #include <string>
@@ -209,6 +210,17 @@ int main(int, char**) {
     for (const wchar_t* id : {L"fluent", L"card", L"minimal"}) {
         Check(Exists(themes::Dir() + L"\\" + id + L".json"), std::wstring(L"sample written: ") + id);
     }
+
+    Out(L"== 10. 字体列表 ==");
+    Check(fonts::All().size() > 5, L"system fonts enumerated");
+    bool vertical = false, empty = false;
+    for (const std::wstring& f : fonts::All()) {
+        if (f.empty()) empty = true;
+        if (!f.empty() && f[0] == L'@') vertical = true;
+    }
+    Check(!empty && !vertical, L"no empty or vertical-only family names");
+    Check(fonts::Label(L"") == L"微软雅黑 UI（默认）", L"empty family shows default label");
+    Check(fonts::Label(L"Consolas") == L"Consolas", L"family label is the family name");
 
     RemoveTree(root);
     Out(L"");

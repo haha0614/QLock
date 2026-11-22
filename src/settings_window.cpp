@@ -4,6 +4,7 @@
 #include "theme.h"
 #include "gfx.h"
 #include "lock_view.h"
+#include "font_list.h"
 #include <commdlg.h>
 #include <shellapi.h>
 #include <dwmapi.h>
@@ -11,7 +12,9 @@
 #include <windowsx.h>
 #include <vector>
 #include <string>
+#include <map>
 #include <algorithm>
+#include <cwctype>
 
 #pragma comment(lib, "comdlg32.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -91,6 +94,14 @@ enum {
     ID_CLOSE = 400,
     ID_EDIT_SUBTITLE = 500,
     ID_EDIT_PASSWORD = 501,
+    ID_FONT_UI = 340,
+    ID_FONT_CLOCK = 341,
+    ID_FONT_CLOCK_ON = 342,
+    ID_FONT_FILTER = 350,
+    ID_FONT_CANCEL = 351,
+    ID_FONT_DEFAULT = 352,
+    ID_FONT_USE = 353,
+    ID_FONT_ROW = 1000,
 };
 
 const wchar_t* kClass = L"QLockSettings";
@@ -113,6 +124,15 @@ public:
 
     lockview::View preview;
     bool previewLoaded = false;
+
+    // 字体选择器：窗口内的一层浮层，不另开窗口，省掉模态消息循环和 DPI 麻烦。
+    bool fontOpen = false;
+    bool fontForClock = false;
+    std::wstring fontFilter;
+    std::vector<std::wstring> fontRows;
+    int fontSel = 0;
+    int fontTop = 0;
+    std::map<std::wstring, IDWriteTextFormat*> rowFormats;
 
     IDWriteTextFormat* fBrand = nullptr;
     IDWriteTextFormat* fTitle = nullptr;
@@ -157,6 +177,8 @@ public:
         fBody = gfx::Format(ui, 13.5f, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
         fSmall = gfx::Format(ui, 12.0f, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
         fControl = gfx::Format(ui, 14.0f, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
+        for (auto& kv : rowFormats) if (kv.second) kv.second->Release();
+        rowFormats.clear();
     }
 
     static void ReleaseFmt(IDWriteTextFormat** fmt) {
@@ -290,7 +312,12 @@ public:
         }
     }
 
-    void Button(const Rect& r, const std::wstring& text, bool primary, bool hovered) {
+    void Button(const Rect& r, const std::wstring& text, bool primary, bool hovered, bool enabled = true) {
+        if (!enabled) {
+            gfx::FillRound(dc, Round(r, 8), Color(0x0EFFFFFF));
+            gfx::Text(dc, fControl, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(kTextMuted));
+            return;
+        }
         unsigned bg = primary ? (hovered ? kAccentHover : kAccent) : (hovered ? kChipSurface : 0x14FFFFFF);
         gfx::FillRound(dc, Round(r, 8), Color(bg));
         if (!primary) gfx::StrokeRound(dc, Round(r, 8), Color(kChipBorder), 1.0f);
@@ -378,6 +405,12 @@ public:
 
     void DrawField(const Rect& r, const std::wstring& text, int id, bool password, bool enabled,
                    const std::wstring& hint);
+    void DrawFontDialog(float w, float h);
+    IDWriteTextFormat* RowFormat(const std::wstring& family);
+    void RebuildFontRows();
+    void OpenFontDialog(bool forClock);
+    void CloseFontDialog();
+    void CommitFont(const std::wstring& family);
     void Apply(int id);
     void ApplySlider(int id, float x);
     void ClickAt(float x, float y, bool down);
@@ -420,6 +453,133 @@ void Settings::PaintFooter(float w, float h, float left, float right) {
     wg.kind = K_BTN;
     wg.rect = close;
     widgets.push_back(wg);
+}
+
+// ---- 字体选择器 ----
+IDWriteTextFormat* Settings::RowFormat(const std::wstring& family) {
+    auto it = rowFormats.find(family);
+    if (it != rowFormats.end()) return it->second;
+    IDWriteTextFormat* fmt = gfx::Format(family, 14.0f, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
+    rowFormats[family] = fmt;
+    return fmt;
+}
+
+void Settings::RebuildFontRows() {
+    std::wstring needle = fontFilter;
+    for (size_t i = 0; i < needle.size(); ++i) needle[i] = (wchar_t)towlower(needle[i]);
+    fontRows.clear();
+    for (const std::wstring& f : fonts::All()) {
+        if (!needle.empty()) {
+            std::wstring lower = f;
+            for (size_t i = 0; i < lower.size(); ++i) lower[i] = (wchar_t)towlower(lower[i]);
+            if (lower.find(needle) == std::wstring::npos) continue;
+        }
+        fontRows.push_back(f);
+    }
+    fontTop = 0;
+    if (fontSel >= (int)fontRows.size()) fontSel = (int)fontRows.size() - 1;
+    if (fontSel < 0) fontSel = 0;
+}
+
+void Settings::OpenFontDialog(bool forClock) {
+    fontOpen = true;
+    fontForClock = forClock;
+    fontFilter.clear();
+    fontSel = 0;
+    RebuildFontRows();
+    std::wstring current = forClock ? app::cfg.ClockFont : app::cfg.FontFamily;
+    for (size_t i = 0; i < fontRows.size(); ++i) {
+        if (fontRows[i] == current) { fontSel = (int)i; break; }
+    }
+    focus = ID_FONT_FILTER;
+    caretOn = true;
+    Invalidate();
+}
+
+void Settings::CloseFontDialog() {
+    fontOpen = false;
+    focus = 0;
+    Invalidate();
+}
+
+void Settings::CommitFont(const std::wstring& family) {
+    bool clock = fontForClock;
+    if (clock) app::cfg.ClockFont = family;
+    else app::cfg.FontFamily = family;
+    MakeFormats();
+    previewLoaded = false;
+    QueueSave();
+    CloseFontDialog();
+    SetStatus(clock ? L"时钟字体已换，下次锁屏生效" : L"字体已换，界面和锁屏都用它", false);
+}
+
+void Settings::DrawFontDialog(float w, float h) {
+    gfx::FillRect(dc, D2D1::RectF(0, 0, w, h), Color(0xB4000000));
+    float cw = 440, ch = 500;
+    Rect card{ (w - cw) / 2, (h - ch) / 2, (w + cw) / 2, (h + ch) / 2 };
+    gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(card.l, card.t, card.r, card.b), 12, 12), Color(kSurface));
+    gfx::StrokeRound(dc, D2D1::RoundedRect(D2D1::RectF(card.l, card.t, card.r, card.b), 12, 12), Color(kLine), 1.0f);
+    gfx::Text(dc, fTitle, fontForClock ? L"选择时钟字体" : L"选择界面字体",
+              D2D1::RectF(card.l + 20, card.t + 16, card.r - 20, card.t + 46), Color(kText));
+
+    Rect filter{ card.l + 20, card.t + 52, card.r - 20, card.t + 52 + ControlH };
+    DrawField(filter, fontFilter, ID_FONT_FILTER, false, true, L"输入名字筛选");
+
+    float rowH = 32;
+    Rect list{ card.l + 12, filter.b + 12, card.r - 12, card.b - 62 };
+    int visible = (int)(list.H() / rowH);
+    if (visible < 1) visible = 1;
+    int total = (int)fontRows.size();
+    if (fontSel < 0) fontSel = 0;
+    if (fontSel >= total) fontSel = total - 1;
+    if (fontSel < fontTop) fontTop = fontSel;
+    if (fontSel >= fontTop + visible) fontTop = fontSel - visible + 1;
+    if (fontTop > total - visible) fontTop = (std::max)(0, total - visible);
+
+    dc->PushAxisAlignedClip(D2D1::RectF(list.l, list.t, list.r, list.b), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    for (int i = 0; i < visible; ++i) {
+        int idx = fontTop + i;
+        if (idx >= total) break;
+        Rect row{ list.l, list.t + i * rowH, list.r, list.t + (i + 1) * rowH };
+        if (idx == fontSel) {
+            gfx::FillRound(dc, Round(row, 6), Color(kAccentSoft));
+        } else if (hot == ID_FONT_ROW + idx) {
+            gfx::FillRound(dc, Round(row, 6), Color(kChipSurface));
+        }
+        IDWriteTextFormat* fmt = RowFormat(fontRows[idx]);
+        gfx::Text(dc, fmt ? fmt : fControl, fontRows[idx], D2D1::RectF(row.l + 12, row.t, row.r - 14, row.b),
+                  Color(kText));
+        Widget wg;
+        wg.id = ID_FONT_ROW + idx;
+        wg.kind = K_BTN;
+        wg.rect = row;
+        widgets.push_back(wg);
+    }
+    dc->PopAxisAlignedClip();
+
+    if (total > visible) {
+        float trackH = list.H();
+        float thumbH = (std::max)(26.0f, trackH * visible / (float)total);
+        float span = (float)(std::max)(1, total - visible);
+        float pos = list.t + (trackH - thumbH) * (fontTop / (float)span);
+        gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(list.r + 2, pos, list.r + 6, pos + thumbH), 2, 2),
+                       Color(kChipBorder));
+    }
+    if (total == 0) {
+        gfx::Text(dc, fSmall, L"没有匹配的字体", D2D1::RectF(list.l + 12, list.t + 8, list.r, list.t + 30),
+                  Color(kTextMuted));
+    }
+
+    float by = card.b - 46;
+    Rect use{ card.r - 20 - 88, by, card.r - 20, by + ControlH };
+    Rect def{ use.l - 8 - 96, by, use.l - 8, by + ControlH };
+    Rect cancel{ def.l - 8 - 76, by, def.l - 8, by + ControlH };
+    Button(cancel, L"取消", false, hot == ID_FONT_CANCEL);
+    Button(def, L"用默认", false, hot == ID_FONT_DEFAULT);
+    Button(use, L"使用", true, hot == ID_FONT_USE);
+    Widget a; a.id = ID_FONT_CANCEL; a.kind = K_BTN; a.rect = cancel; widgets.push_back(a);
+    Widget b; b.id = ID_FONT_DEFAULT; b.kind = K_BTN; b.rect = def; widgets.push_back(b);
+    Widget c; c.id = ID_FONT_USE; c.kind = K_BTN; c.rect = use; widgets.push_back(c);
 }
 
 void Settings::LayoutLook(float left, float right, float top, float bottom) {
@@ -515,6 +675,30 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
         widgets.push_back(wg);
         subtitleRect = Rect{ toggleR.l - 8 - 190, y + 12, toggleR.l - 8, y + 12 + ControlH };
         DrawField(subtitleRect, subtitleText, ID_EDIT_SUBTITLE, false, app::cfg.ShowSubtitle, L"输入密码解锁");
+    }
+    y += RowH;
+
+    // 界面字体
+    RowLine(y, left, right);
+    gfx::Text(dc, fBody, L"界面字体", D2D1::RectF(left, y, left + 220, y + RowH), Color(kText));
+    {
+        Rect pick{ right - 240, y + 12, right, y + 12 + ControlH };
+        Button(pick, fonts::Label(app::cfg.FontFamily), false, hot == ID_FONT_UI);
+        Widget wg; wg.id = ID_FONT_UI; wg.kind = K_BTN; wg.rect = pick; widgets.push_back(wg);
+    }
+    y += RowH;
+
+    // 时钟字体：开关关掉时右边的按钮跟着变灰。
+    RowLine(y, left, right);
+    gfx::Text(dc, fBody, L"时钟字体", D2D1::RectF(left, y, left + 220, y + RowH), Color(kText));
+    {
+        bool on = app::cfg.ClockFontEnabled;
+        Rect toggleR{ right - 40, y + 12, right, y + 12 + ControlH };
+        Toggle(toggleR, on);
+        Widget t; t.id = ID_FONT_CLOCK_ON; t.kind = K_TOGGLE; t.rect = toggleR; t.on = on; widgets.push_back(t);
+        Rect pick{ toggleR.l - 8 - 190, y + 12, toggleR.l - 8, y + 12 + ControlH };
+        Button(pick, fonts::Label(app::cfg.ClockFont), false, on && hot == ID_FONT_CLOCK, on);
+        if (on) { Widget wg; wg.id = ID_FONT_CLOCK; wg.kind = K_BTN; wg.rect = pick; widgets.push_back(wg); }
     }
     y += RowH;
 
@@ -614,6 +798,11 @@ void Settings::Paint() {
 
     PaintFooter(w, h, left, right);
 
+    if (fontOpen) {
+        widgets.clear();
+        DrawFontDialog(w, h);
+    }
+
     HRESULT hr = dc->EndDraw();
     if (hr == D2DERR_RECREATE_TARGET) {
         preview.DropDeviceResources();
@@ -668,6 +857,25 @@ void Settings::ApplySlider(int id, float x) {
 }
 
 void Settings::Apply(int id) {
+    if (id == ID_FONT_UI) { OpenFontDialog(false); return; }
+    if (id == ID_FONT_CLOCK) { OpenFontDialog(true); return; }
+    if (id == ID_FONT_CLOCK_ON) {
+        app::cfg.ClockFontEnabled = !app::cfg.ClockFontEnabled;
+        QueueSave();
+        Invalidate();
+        return;
+    }
+    if (id == ID_FONT_CANCEL) { CloseFontDialog(); return; }
+    if (id == ID_FONT_DEFAULT) { CommitFont(std::wstring()); return; }
+    if (id == ID_FONT_USE) {
+        if (fontSel >= 0 && fontSel < (int)fontRows.size()) CommitFont(fontRows[fontSel]);
+        return;
+    }
+    if (id >= ID_FONT_ROW && id < ID_FONT_ROW + (int)fontRows.size()) {
+        fontSel = id - ID_FONT_ROW;
+        CommitFont(fontRows[fontSel]);
+        return;
+    }
     if (id >= ID_NAV_BASE && id < ID_NAV_BASE + 5) {
         pane = id - ID_NAV_BASE;
         scroll = 0;
@@ -846,6 +1054,8 @@ void Settings::DestroyAll() {
     ReleaseFmt(&fBody);
     ReleaseFmt(&fSmall);
     ReleaseFmt(&fControl);
+    for (auto& kv : rowFormats) if (kv.second) kv.second->Release();
+    rowFormats.clear();
     if (dc) dc->SetTarget(nullptr);
     if (target) { target->Release(); target = nullptr; }
     if (swap) { swap->Release(); swap = nullptr; }
@@ -925,6 +1135,13 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_MOUSEWHEEL: {
+        if (self->fontOpen) {
+            int delta = GET_WHEEL_DELTA_WPARAM(wp);
+            self->fontTop -= delta / 120 * 2;
+            if (self->fontTop < 0) self->fontTop = 0;
+            self->Invalidate();
+            return 0;
+        }
         if (self->pane != 1 || self->scrollMax <= 0) return 0;
         int delta = GET_WHEEL_DELTA_WPARAM(wp);
         self->scroll -= delta / 120.0f * 60.0f;
@@ -938,6 +1155,21 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_CHAR: {
         wchar_t ch = (wchar_t)wp;
+        if (self->fontOpen && self->focus == ID_FONT_FILTER) {
+            if (ch == 8) {
+                if (self->fontFilter.empty()) return 0;
+                self->fontFilter.pop_back();
+            } else if (ch >= 32 && self->fontFilter.size() < 24) {
+                self->fontFilter.push_back(ch);
+            } else {
+                return 0;
+            }
+            self->fontSel = 0;
+            self->RebuildFontRows();
+            self->caretOn = true;
+            self->Invalidate();
+            return 0;
+        }
         if (self->focus == ID_EDIT_SUBTITLE) {
             if (!app::cfg.ShowSubtitle) return 0;
             if (ch == 8) {
@@ -967,6 +1199,17 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_KEYDOWN:
+        if (self->fontOpen) {
+            if (wp == VK_ESCAPE) { self->CloseFontDialog(); return 0; }
+            if (wp == VK_RETURN) { self->Apply(ID_FONT_USE); return 0; }
+            if (wp == VK_UP && self->fontSel > 0) { self->fontSel--; self->Invalidate(); return 0; }
+            if (wp == VK_DOWN && self->fontSel + 1 < (int)self->fontRows.size()) {
+                self->fontSel++;
+                self->Invalidate();
+                return 0;
+            }
+            return 0;
+        }
         if (wp == VK_ESCAPE) { DestroyWindow(hwnd); return 0; }
         return 0;
     case WM_CLOSE:
