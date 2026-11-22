@@ -20,7 +20,7 @@ cl /nologo /std:c++17 /utf-8 /EHsc /O2 /MT /W3 /DUNICODE /D_UNICODE /DWIN32_LEAN
    /Fo:"%ROOT%obj\\" /Fe:"%ROOT%bin\QLock.exe" ^
    "%ROOT%src\*.cpp" "%ROOT%obj\qlock.res" ^
    /link /SUBSYSTEM:WINDOWS ^
-   /MANIFEST:EMBED /MANIFESTUAC:"level='asInvoker' uiAccess='false'"
+   /MANIFEST:EMBED /MANIFESTINPUT:"%ROOT%src\app.manifest"
 if errorlevel 1 (
   echo [build] FAILED
   exit /b 1
