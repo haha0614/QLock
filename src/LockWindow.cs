@@ -131,6 +131,7 @@ namespace QLock
             TextBlock subtitle = Ui.Text(cfg.Subtitle, theme.Subtitle.Size,
                 Ui.BrushOf(theme.Subtitle.Color, Ui.TextPrimary), FontWeights.Normal);
             subtitle.Margin = new Thickness(0, 0, 0, theme.Subtitle.Gap);
+            if (!cfg.ShowSubtitle || !theme.Subtitle.Show) subtitle.Visibility = Visibility.Collapsed;
             body.Children.Add(subtitle);
 
             passwordBox = new PasswordBox();

@@ -90,6 +90,7 @@ namespace QLock
     [DataContract]
     public class ThemeSubtitle
     {
+        [DataMember] public bool Show = true;
         [DataMember] public double Size = 13;
         [DataMember] public string Color = "#FFE8EEF7";
         [DataMember] public double Gap = 14;
@@ -97,6 +98,7 @@ namespace QLock
         [OnDeserializing]
         void Defaults(StreamingContext ctx)
         {
+            Show = true;
             Size = 13;
             Color = "#FFE8EEF7";
             Gap = 14;

@@ -1,7 +1,16 @@
-# 重新生成 docs 里的两张截图：锁屏用默认纯色背景，设置窗单独开。
+﻿# 重新生成 docs 里的两张截图：锁屏用默认纯色背景，设置窗单独开。
 $proj = Split-Path -Parent $PSScriptRoot
 $cfgPath = Join-Path $env:APPDATA "QLock\config.json"
 $backup = [System.IO.File]::ReadAllBytes($cfgPath)
+
+# 只改这几个字段，别用 ConvertFrom-Json 来回转：PS 5.1 会把无 BOM 的 UTF-8 当 ANSI，中文全变乱码
+# 截图统一拍默认外观：Fluent 主题、默认提示文字、提示文字可见、不自动锁
+$text = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+$text = [regex]::Replace($text, '"LockOnStartup"\s*:\s*true', '"LockOnStartup":false')
+$text = [regex]::Replace($text, '"ThemeId"\s*:\s*"[^"]*"', '"ThemeId":"fluent"')
+$text = [regex]::Replace($text, '"Subtitle"\s*:\s*"[^"]*"', '"Subtitle":"输入密码解锁"')
+$text = [regex]::Replace($text, '"ShowSubtitle"\s*:\s*(true|false)', '"ShowSubtitle":true')
+[System.IO.File]::WriteAllText($cfgPath, $text, (New-Object System.Text.UTF8Encoding($false)))
 
 Get-Process QLock -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 600
@@ -13,10 +22,6 @@ Start-Sleep -Seconds 11
 Get-Process QLock -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 800
 
-# 只改这一个字段，别用 ConvertFrom-Json 来回转：PS 5.1 会把无 BOM 的 UTF-8 当 ANSI，中文全变乱码
-$text = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
-$text = [regex]::Replace($text, '"LockOnStartup"\s*:\s*true', '"LockOnStartup":false')
-[System.IO.File]::WriteAllText($cfgPath, $text, (New-Object System.Text.UTF8Encoding($false)))
 Start-Process (Join-Path $proj "bin\QLock.exe") -ArgumentList "--settings"
 Start-Sleep -Seconds 4
 Add-Type -AssemblyName UIAutomationClient

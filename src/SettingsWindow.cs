@@ -55,7 +55,7 @@ namespace QLock
             Win = new Window();
             Win.Title = firstRun ? "QLock 首次设置" : "QLock 设置";
             Win.Width = 780;
-            Win.Height = 580;
+            Win.Height = 640;
             Win.ResizeMode = ResizeMode.CanMinimize;
             Win.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Win.Background = Ui.Surface;
@@ -394,14 +394,31 @@ namespace QLock
             subtitleBox = new TextBox();
             subtitleBox.Width = 190;
             subtitleBox.Text = cfg.Subtitle;
+            subtitleBox.Margin = new Thickness(Design.Gap12, 0, 0, 0);
             Ui.StyleInput(subtitleBox);
+            subtitleBox.IsEnabled = cfg.ShowSubtitle;
             subtitleBox.LostFocus += delegate { CommitSubtitle(); };
             subtitleBox.TextChanged += delegate { RefreshPreview(); };
             subtitleBox.KeyDown += delegate(object s, KeyEventArgs e)
             {
                 if (e.Key == Key.Enter) { CommitSubtitle(); }
             };
-            pane.Children.Add(Row("提示文字", subtitleBox));
+
+            CheckBox showSubtitle = Toggle(cfg.ShowSubtitle);
+            showSubtitle.HorizontalAlignment = HorizontalAlignment.Left;
+            NameControl(showSubtitle, "显示提示文字");
+            Bind(showSubtitle, delegate(bool on)
+            {
+                cfg.ShowSubtitle = on;
+                subtitleBox.IsEnabled = on;
+                RefreshPreview();
+            }, "已保存，下次锁屏生效");
+
+            StackPanel subtitleRow = new StackPanel();
+            subtitleRow.Orientation = Orientation.Horizontal;
+            subtitleRow.Children.Add(showSubtitle);
+            subtitleRow.Children.Add(subtitleBox);
+            pane.Children.Add(Row("提示文字", subtitleRow));
 
             return pane;
         }
@@ -409,7 +426,7 @@ namespace QLock
         FrameworkElement BuildPreviewArea()
         {
             previewHost = new Squircle();
-            previewHost.Height = 160;
+            previewHost.Height = 216;
             previewHost.CornerRadius = new CornerRadius(Design.RadiusCard);
             previewHost.BorderThickness = new Thickness(1);
             previewHost.BorderBrush = Ui.Line;
@@ -427,7 +444,7 @@ namespace QLock
 
             Grid root = new Grid();
             root.Width = 960;
-            root.Height = 308;
+            root.Height = 408;
             root.ClipToBounds = true;
             root.Background = Ui.BrushOf(t.Background.Color, Brushes.Black);
 
@@ -519,6 +536,7 @@ namespace QLock
             TextBlock sub = Ui.Text(subtitle, t.Subtitle.Size,
                 Ui.BrushOf(t.Subtitle.Color, Ui.TextPrimary), FontWeights.Normal);
             sub.Margin = new Thickness(0, 0, 0, t.Subtitle.Gap);
+            if (!cfg.ShowSubtitle || !t.Subtitle.Show) sub.Visibility = Visibility.Collapsed;
             body.Children.Add(sub);
 
             bool underline = string.Equals(t.Input.Kind, "underline", StringComparison.OrdinalIgnoreCase);

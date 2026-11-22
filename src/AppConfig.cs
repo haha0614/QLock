@@ -29,6 +29,7 @@ namespace QLock
 
         [DataMember] public bool BackgroundSnapshot = false;
         [DataMember] public bool ShowClock = true;
+        [DataMember] public bool ShowSubtitle = true;
         [DataMember] public string Subtitle = "输入密码解锁";
         [DataMember] public string ThemeId = "fluent";
 
@@ -55,6 +56,7 @@ namespace QLock
             LockOnStartup = false;
             BackgroundSnapshot = false;
             ShowClock = true;
+            ShowSubtitle = true;
             Subtitle = "输入密码解锁";
             ThemeId = "fluent";
             LastUpdateCheckTicks = 0;

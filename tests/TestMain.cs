@@ -63,7 +63,7 @@ namespace QLock
 
             AppConfig partial = AppConfig.Deserialize("{\"Version\":1,\"PasswordHash\":\"x\",\"PasswordSalt\":\"y\"}");
             Check(partial.InterceptWinL && partial.BlockSystemHotkeys && partial.ShowTray, "partial config keeps hardening defaults");
-            Check(!partial.BackgroundSnapshot && partial.ShowClock && partial.CustomHotkeyEnabled, "partial config keeps appearance defaults");
+            Check(!partial.BackgroundSnapshot && partial.ShowClock && partial.ShowSubtitle && partial.CustomHotkeyEnabled, "partial config keeps appearance defaults");
             Check(partial.PasswordIterations == Auth.DefaultIterations, "partial config keeps iteration count");
             Check(partial.Autostart == "none", "partial config keeps autostart default");
             Check(partial.LastUpdateCheckTicks == 0 && partial.SkippedVersion == "", "partial config keeps update defaults");
