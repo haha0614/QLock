@@ -206,7 +206,7 @@ namespace QLock
         static ControlTemplate RowTemplate()
         {
             ControlTemplate template = new ControlTemplate(typeof(ListBoxItem));
-            FrameworkElementFactory bg = new FrameworkElementFactory(typeof(Squircle));
+            FrameworkElementFactory bg = new FrameworkElementFactory(typeof(Border));
             bg.Name = "bg";
             bg.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
             bg.SetValue(Border.CornerRadiusProperty, new CornerRadius(Design.RadiusControl));

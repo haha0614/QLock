@@ -146,7 +146,7 @@ namespace QLock
             c.Background = background;
 
             ControlTemplate template = new ControlTemplate(c.GetType());
-            FrameworkElementFactory border = new FrameworkElementFactory(typeof(Squircle));
+            FrameworkElementFactory border = new FrameworkElementFactory(typeof(Border));
             border.Name = "bg";
             border.SetValue(Border.CornerRadiusProperty, new CornerRadius(radius));
             border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
@@ -185,7 +185,7 @@ namespace QLock
             b.Background = primary ? AccentStrong : ChipSurface;
 
             ControlTemplate template = new ControlTemplate(typeof(Button));
-            FrameworkElementFactory border = new FrameworkElementFactory(typeof(Squircle));
+            FrameworkElementFactory border = new FrameworkElementFactory(typeof(Border));
             border.Name = "bg";
             border.SetValue(Border.CornerRadiusProperty, new CornerRadius(Design.RadiusControl));
             border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
@@ -224,7 +224,7 @@ namespace QLock
             b.Background = background;
 
             ControlTemplate template = new ControlTemplate(typeof(Button));
-            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Squircle));
+            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Border));
             frame.Name = "bg";
             frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(radius));
             frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
@@ -333,7 +333,7 @@ namespace QLock
             cb.VerticalAlignment = VerticalAlignment.Center;
 
             ControlTemplate template = new ControlTemplate(typeof(CheckBox));
-            FrameworkElementFactory track = new FrameworkElementFactory(typeof(Squircle));
+            FrameworkElementFactory track = new FrameworkElementFactory(typeof(Border));
             track.Name = "track";
             track.SetValue(FrameworkElement.WidthProperty, 40.0);
             track.SetValue(FrameworkElement.HeightProperty, 22.0);

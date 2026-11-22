@@ -116,11 +116,11 @@ namespace QLock
             dateText.Visibility = clockText.Visibility;
             column.Children.Add(dateText);
 
-            Border card = new Squircle();
+            Border card = new Border();
             if (theme.Card.Show)
             {
                 card.Width = theme.Card.Width;
-                card.CornerRadius = new CornerRadius(Radius(theme.Card.Radius));
+                card.CornerRadius = new CornerRadius(Radius(theme.Card.Radius, 0));
                 card.Padding = new Thickness(theme.Card.PadH, theme.Card.PadV, theme.Card.PadH, theme.Card.PadV);
                 card.Background = Ui.BrushOf(theme.Card.Bg, Brushes.Transparent);
                 card.BorderThickness = new Thickness(1);
@@ -260,10 +260,11 @@ namespace QLock
             clockTimer.Start();
         }
 
-        // 圆角没自己调过就用主题里的值。
-        double Radius(double themeValue)
+        // 圆角没自己调过就用主题里的值；调得比控件半个高还大时截住，否则两边圆弧会互相吃掉。
+        double Radius(double themeValue, double height)
         {
-            return cfg.CornerRadius >= 0 ? cfg.CornerRadius : themeValue;
+            double r = cfg.CornerRadius >= 0 ? cfg.CornerRadius : themeValue;
+            return height > 0 ? Math.Min(r, height / 2) : r;
         }
 
         static ImageSource LoadImage(string path, double width)
@@ -317,7 +318,7 @@ namespace QLock
 
         void StyleLockInput(PasswordBox box)
         {
-            Ui.StyleInput(box, false, theme.Input.Height, Radius(theme.Input.Radius),
+            Ui.StyleInput(box, false, theme.Input.Height, Radius(theme.Input.Radius, theme.Input.Height),
                 Ui.BrushOf(theme.Input.Bg, Ui.InputBg),
                 Ui.BrushOf(theme.Input.Border, Ui.InputBorder),
                 Ui.BrushOf(theme.Input.Fg, Brushes.White),
@@ -339,7 +340,7 @@ namespace QLock
                 ? Ui.Shade(theme.Button.Bg, Ui.AccentHover)
                 : Ui.BrushOf(theme.Button.Hover, Ui.AccentHover);
             Brush border = outline ? Ui.BrushOf(theme.Button.Border, Ui.ChipBorder) : null;
-            return Ui.StyledButton(text, theme.Button.Height, Radius(theme.Button.Radius), bg, fg, hover, border, theme.Button.Size);
+            return Ui.StyledButton(text, theme.Button.Height, Radius(theme.Button.Radius, theme.Button.Height), bg, fg, hover, border, theme.Button.Size);
         }
 
         public void ShowLock()

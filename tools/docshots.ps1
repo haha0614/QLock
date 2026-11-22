@@ -4,12 +4,28 @@ $cfgPath = Join-Path $env:APPDATA "QLock\config.json"
 $backup = [System.IO.File]::ReadAllBytes($cfgPath)
 
 # 只改这几个字段，别用 ConvertFrom-Json 来回转：PS 5.1 会把无 BOM 的 UTF-8 当 ANSI，中文全变乱码
-# 截图统一拍默认外观：Fluent 主题、默认提示文字、提示文字可见、不自动锁
+# 截图统一拍默认外观：Fluent 主题、默认提示文字、提示文字可见、纯色背景、圆角跟主题、不自动锁
+function Set-Field([string]$t, [string]$name, [string]$value) {
+    $pattern = '"' + $name + '"\s*:\s*(?:"[^"]*"|-?[0-9.]+|true|false)'
+    if ([regex]::IsMatch($t, $pattern)) {
+        return [regex]::Replace($t, $pattern, ('"' + $name + '":' + $value))
+    }
+    $i = $t.LastIndexOf('}')
+    $head = $t.Substring(0, $i).TrimEnd()
+    if ($head.EndsWith(',')) { $head = $head.Substring(0, $head.Length - 1) }
+    return $head + ', "' + $name + '":' + $value + $t.Substring($i)
+}
+
 $text = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
-$text = [regex]::Replace($text, '"LockOnStartup"\s*:\s*true', '"LockOnStartup":false')
-$text = [regex]::Replace($text, '"ThemeId"\s*:\s*"[^"]*"', '"ThemeId":"fluent"')
-$text = [regex]::Replace($text, '"Subtitle"\s*:\s*"[^"]*"', '"Subtitle":"输入密码解锁"')
-$text = [regex]::Replace($text, '"ShowSubtitle"\s*:\s*(true|false)', '"ShowSubtitle":true')
+$text = Set-Field $text 'LockOnStartup' 'false'
+$text = Set-Field $text 'ThemeId' '"fluent"'
+$text = Set-Field $text 'Subtitle' '"输入密码解锁"'
+$text = Set-Field $text 'ShowSubtitle' 'true'
+$text = Set-Field $text 'BackgroundImage' '""'
+$text = Set-Field $text 'BackgroundSnapshot' 'false'
+$text = Set-Field $text 'CornerRadius' '-1'
+$text = Set-Field $text 'BlurRadius' '-1'
+$text = Set-Field $text 'MaskOpacity' '-1'
 [System.IO.File]::WriteAllText($cfgPath, $text, (New-Object System.Text.UTF8Encoding($false)))
 
 Get-Process QLock -ErrorAction SilentlyContinue | Stop-Process -Force

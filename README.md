@@ -144,7 +144,7 @@ Windows 不允许给已经跑起来的进程提权。不在管理员组的账号
 源码大致这样分：`Program.cs` 是外壳、单实例和命令行，`LockController.cs` 是状态机和键盘钩子，
 `Updater.cs` 查 Release、校验并替换 exe，`UpdateWindow.cs` 是那个更新窗口，
 `LockWindow.cs` 是每块屏一个的全屏窗口，`LockTheme.cs` 是主题的读入和内置三套，`Native.cs` 放 P/Invoke，`Auth.cs` 是 PBKDF2 和恢复码，
-`AppConfig.cs` 是配置和原子写，`Design.cs` 是尺寸和字号的那套数值，`Squircle.cs` 画连续曲率的圆角，`FontPicker.cs` 是选字体的窗口，
+`AppConfig.cs` 是配置和原子写，`Design.cs` 是尺寸和字号的那套数值，`FontPicker.cs` 是选字体的窗口，
 剩下 `Ui.cs`、`SettingsWindow.cs`、`TrayIcon.cs`、`Snapshot.cs`、`Log.cs`。
 
 图标 `src\QLock.ico` 由 `tools\makeicon.ps1` 生成，用的是 QTools 那只兔子（Lucide rabbit，ISC）。

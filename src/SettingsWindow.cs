@@ -40,7 +40,7 @@ namespace QLock
         TextBox idleBox;
         TextBox subtitleBox;
         WrapPanel themeWrap;
-        Squircle previewHost;
+        Border previewHost;
         Button fontButton;
         Button clockFontButton;
         Button bgButton;
@@ -200,7 +200,7 @@ namespace QLock
         static ControlTemplate NavTemplate()
         {
             ControlTemplate template = new ControlTemplate(typeof(Button));
-            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Squircle));
+            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Border));
             frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(Design.RadiusControl));
             frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
             frame.SetValue(Border.PaddingProperty, new Thickness(Design.Gap12, 0, Design.Gap12, 0));
@@ -591,9 +591,10 @@ namespace QLock
             sliderSave.Start();
         }
 
-        double Radius(double themeValue)
+        double Radius(double themeValue, double height)
         {
-            return cfg.CornerRadius >= 0 ? cfg.CornerRadius : themeValue;
+            double r = cfg.CornerRadius >= 0 ? cfg.CornerRadius : themeValue;
+            return height > 0 ? Math.Min(r, height / 2) : r;
         }
 
         // 换主题时把「跟主题走」的那几个滑块一起带过去；拖过的保持用户值。
@@ -659,15 +660,21 @@ namespace QLock
             SaveNow("时钟字体已换，下次锁屏生效");
         }
 
-        Squircle BuildPreviewArea()
+        Border BuildPreviewArea()
         {
-            previewHost = new Squircle();
+            previewHost = new Border();
             previewHost.Height = 216;
             previewHost.CornerRadius = new CornerRadius(Design.RadiusCard);
             previewHost.BorderThickness = new Thickness(1);
             previewHost.BorderBrush = Ui.Line;
             previewHost.ClipToBounds = true;
             previewHost.Margin = new Thickness(Design.PanePad, Design.Gap4, Design.PanePad, Design.Gap12);
+            // Border 不会把子元素裁到圆角，预览里的壁纸得自己套一层圆角裁切。
+            previewHost.SizeChanged += delegate
+            {
+                previewHost.Clip = new RectangleGeometry(new Rect(0, 0, previewHost.ActualWidth, previewHost.ActualHeight),
+                    Design.RadiusCard, Design.RadiusCard);
+            };
             RefreshPreview();
             return previewHost;
         }
@@ -750,11 +757,11 @@ namespace QLock
             date.Visibility = clock.Visibility;
             column.Children.Add(date);
 
-            Border card = new Squircle();
+            Border card = new Border();
             if (t.Card.Show)
             {
                 card.Width = t.Card.Width;
-                card.CornerRadius = new CornerRadius(Radius(t.Card.Radius));
+                card.CornerRadius = new CornerRadius(Radius(t.Card.Radius, 0));
                 card.Padding = new Thickness(t.Card.PadH, t.Card.PadV, t.Card.PadH, t.Card.PadV);
                 card.Background = Ui.BrushOf(t.Card.Bg, Brushes.Transparent);
                 card.BorderThickness = new Thickness(1);
@@ -791,7 +798,7 @@ namespace QLock
             body.Children.Add(sub);
 
             bool underline = string.Equals(t.Input.Kind, "underline", StringComparison.OrdinalIgnoreCase);
-            Border input = new Squircle();
+            Border input = new Border();
             input.Height = t.Input.Height;
             if (underline)
             {
@@ -802,7 +809,7 @@ namespace QLock
             else
             {
                 input.Background = Ui.BrushOf(t.Input.Bg, Ui.InputBg);
-                input.CornerRadius = new CornerRadius(Radius(t.Input.Radius));
+                input.CornerRadius = new CornerRadius(Radius(t.Input.Radius, t.Input.Height));
                 input.BorderThickness = new Thickness(1);
                 input.BorderBrush = Ui.BrushOf(t.Input.Border, Ui.InputBorder);
             }
@@ -820,7 +827,7 @@ namespace QLock
                 ? Ui.Shade(t.Button.Bg, Ui.AccentHover)
                 : Ui.BrushOf(t.Button.Hover, Ui.AccentHover);
             Brush btnBorder = outline ? Ui.BrushOf(t.Button.Border, Ui.ChipBorder) : null;
-            Button unlock = Ui.StyledButton("解锁", t.Button.Height, Radius(t.Button.Radius), btnBg, btnFg, btnHover, btnBorder, t.Button.Size);
+            Button unlock = Ui.StyledButton("解锁", t.Button.Height, Radius(t.Button.Radius, t.Button.Height), btnBg, btnFg, btnHover, btnBorder, t.Button.Size);
             unlock.Focusable = false;
             unlock.IsHitTestVisible = false;
 
