@@ -58,7 +58,7 @@ namespace QLock
             Win.Height = 580;
             Win.ResizeMode = ResizeMode.CanMinimize;
             Win.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            Win.Background = new SolidColorBrush(Color.FromRgb(24, 27, 35));
+            Win.Background = Ui.Surface;
             Win.FontFamily = Ui.Font;
             Win.Foreground = Ui.TextPrimary;
             Win.Closing += OnClosing;
@@ -70,18 +70,18 @@ namespace QLock
             Grid root = new Grid();
             root.ColumnDefinitions.Add(new ColumnDefinition());
             root.ColumnDefinitions.Add(new ColumnDefinition());
-            root.ColumnDefinitions[0].Width = new GridLength(192);
+            root.ColumnDefinitions[0].Width = new GridLength(Design.NavWidth);
 
             Border nav = new Border();
-            nav.Background = new SolidColorBrush(Color.FromRgb(18, 21, 28));
+            nav.Background = Ui.SurfaceNav;
             nav.BorderThickness = new Thickness(0, 0, 1, 0);
-            nav.BorderBrush = Ui.Fg(30, 255, 255, 255);
+            nav.BorderBrush = Ui.Line;
             root.Children.Add(nav);
 
             StackPanel navStack = new StackPanel();
-            navStack.Margin = new Thickness(14, 20, 14, 16);
-            TextBlock brand = Ui.Text("QLock", 17, Ui.TextPrimary, FontWeights.SemiBold);
-            brand.Margin = new Thickness(10, 0, 0, 16);
+            navStack.Margin = new Thickness(Design.Gap16, Design.Gap20, Design.Gap16, Design.Gap16);
+            TextBlock brand = Ui.Text("QLock", Design.FontBrand, Ui.TextPrimary, FontWeights.SemiBold);
+            brand.Margin = new Thickness(Design.Gap12, 0, 0, Design.Gap16);
             navStack.Children.Add(brand);
 
             AddNav(navStack, "unlock", "解锁方式");
@@ -102,16 +102,16 @@ namespace QLock
             root.Children.Add(body);
 
             StackPanel head = new StackPanel();
-            head.Margin = new Thickness(28, 22, 28, 10);
+            head.Margin = new Thickness(Design.PanePad, Design.Gap20, Design.PanePad, Design.Gap12);
             body.Children.Add(head);
 
-            headerTitle = Ui.Text("", 19, Ui.TextPrimary, FontWeights.SemiBold);
+            headerTitle = Ui.Text("", Design.FontTitle, Ui.TextPrimary, FontWeights.SemiBold);
             head.Children.Add(headerTitle);
 
             scroller = new ScrollViewer();
             scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             scroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-            scroller.Padding = new Thickness(28, 4, 22, 8);
+            scroller.Padding = new Thickness(Design.PanePad, Design.Gap4, Design.PanePad, Design.Gap8);
             Grid.SetRow(scroller, 1);
             body.Children.Add(scroller);
 
@@ -126,10 +126,10 @@ namespace QLock
             foreach (KeyValuePair<string, FrameworkElement> kv in panes) host.Children.Add(kv.Value);
 
             Border footer = new Border();
-            footer.Background = new SolidColorBrush(Color.FromRgb(20, 23, 30));
+            footer.Background = Ui.SurfaceFooter;
             footer.BorderThickness = new Thickness(0, 1, 0, 0);
-            footer.BorderBrush = Ui.Fg(30, 255, 255, 255);
-            footer.Padding = new Thickness(28, 10, 22, 10);
+            footer.BorderBrush = Ui.Line;
+            footer.Padding = new Thickness(Design.PanePad, Design.Gap12, Design.PanePad, Design.Gap12);
             Grid.SetRow(footer, 2);
             body.Children.Add(footer);
 
@@ -139,7 +139,7 @@ namespace QLock
             foot.ColumnDefinitions[1].Width = GridLength.Auto;
             footer.Child = foot;
 
-            statusText = Ui.Text("", 12, Ui.TextSecondary, FontWeights.Normal);
+            statusText = Ui.Text("", Design.FontSmall, Ui.TextSecondary, FontWeights.Normal);
             statusText.VerticalAlignment = VerticalAlignment.Center;
             statusText.TextWrapping = TextWrapping.Wrap;
             foot.Children.Add(statusText);
@@ -164,9 +164,9 @@ namespace QLock
         {
             Button b = new Button();
             b.Content = label;
-            b.Height = 34;
-            b.Margin = new Thickness(0, 1, 0, 1);
-            b.FontSize = 13.5;
+            b.Height = Design.NavItemHeight;
+            b.Margin = new Thickness(0, 2, 0, 2);
+            b.FontSize = Design.FontBody;
             b.FontFamily = Ui.Font;
             b.Cursor = Cursors.Hand;
             b.BorderThickness = new Thickness(0);
@@ -184,9 +184,9 @@ namespace QLock
         {
             ControlTemplate template = new ControlTemplate(typeof(Button));
             FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Border));
-            frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
+            frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(Design.RadiusControl));
             frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
-            frame.SetValue(Border.PaddingProperty, new Thickness(11, 0, 11, 0));
+            frame.SetValue(Border.PaddingProperty, new Thickness(Design.Gap12, 0, Design.Gap12, 0));
             FrameworkElementFactory presenter = new FrameworkElementFactory(typeof(ContentPresenter));
             presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Left);
             presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
@@ -203,7 +203,7 @@ namespace QLock
             foreach (KeyValuePair<string, Button> kv in navButtons)
             {
                 bool on = kv.Key == id;
-                kv.Value.Background = on ? Ui.Fg(46, 96, 150, 250) : Brushes.Transparent;
+                kv.Value.Background = on ? Ui.AccentSoft : Brushes.Transparent;
                 kv.Value.Foreground = on ? Ui.Accent : Ui.TextSecondary;
             }
             if (id == "unlock") headerTitle.Text = "解锁方式";
@@ -225,8 +225,8 @@ namespace QLock
 
             StackPanel texts = new StackPanel();
             texts.VerticalAlignment = VerticalAlignment.Center;
-            texts.Margin = new Thickness(0, 0, 18, 0);
-            texts.Children.Add(Ui.Text(title, 13.5, Ui.TextPrimary, FontWeights.Normal));
+            texts.Margin = new Thickness(0, 0, Design.Gap16, 0);
+            texts.Children.Add(Ui.Text(title, Design.FontBody, Ui.TextPrimary, FontWeights.Normal));
             g.Children.Add(texts);
 
             NameControl(control, title);
@@ -236,9 +236,9 @@ namespace QLock
             g.Children.Add(control);
 
             Border line = new Border();
-            line.Padding = new Thickness(0, 11, 0, 11);
+            line.Padding = new Thickness(0, Design.Gap12, 0, Design.Gap12);
             line.BorderThickness = new Thickness(0, 0, 0, 1);
-            line.BorderBrush = Ui.Fg(24, 255, 255, 255);
+            line.BorderBrush = Ui.RowLine;
             line.Child = g;
             return line;
         }
@@ -246,16 +246,16 @@ namespace QLock
         Border Block(string title, FrameworkElement control)
         {
             StackPanel s = new StackPanel();
-            s.Children.Add(Ui.Text(title, 13.5, Ui.TextPrimary, FontWeights.Normal));
+            s.Children.Add(Ui.Text(title, Design.FontBody, Ui.TextPrimary, FontWeights.Normal));
             NameControl(control, title);
-            control.Margin = new Thickness(0, 10, 0, 0);
+            control.Margin = new Thickness(0, Design.Gap12, 0, 0);
             control.HorizontalAlignment = HorizontalAlignment.Left;
             s.Children.Add(control);
 
             Border line = new Border();
-            line.Padding = new Thickness(0, 11, 0, 11);
+            line.Padding = new Thickness(0, Design.Gap12, 0, Design.Gap12);
             line.BorderThickness = new Thickness(0, 0, 0, 1);
-            line.BorderBrush = Ui.Fg(24, 255, 255, 255);
+            line.BorderBrush = Ui.RowLine;
             line.Child = s;
             return line;
         }
@@ -312,14 +312,14 @@ namespace QLock
 
             Button apply = Ui.Button("设置", false);
             apply.Width = 72;
-            apply.Margin = new Thickness(8, 0, 0, 0);
+            apply.Margin = new Thickness(Design.Gap8, 0, 0, 0);
             apply.Click += delegate { ApplyPassword(); };
             pwdRow.Children.Add(apply);
 
             pane.Children.Add(Row("解锁密码", pwdRow));
 
             recStatus = Ui.Text(!string.IsNullOrEmpty(cfg.RecoveryHash) ? "已设置恢复码。" : "还没有恢复码。",
-                12, Ui.TextSecondary, FontWeights.Normal);
+                Design.FontSmall, Ui.TextSecondary, FontWeights.Normal);
 
             recOut = new TextBox();
             recOut.IsReadOnly = true;
@@ -327,11 +327,11 @@ namespace QLock
             recOut.FontFamily = new FontFamily("Consolas, Microsoft YaHei UI");
             Ui.StyleInput(recOut);
             recOut.Visibility = Visibility.Collapsed;
-            recOut.Margin = new Thickness(0, 8, 0, 0);
+            recOut.Margin = new Thickness(0, Design.Gap8, 0, 0);
 
             Button genRec = Ui.Button("生成新的恢复码", false);
             genRec.Width = 150;
-            genRec.Margin = new Thickness(0, 8, 0, 0);
+            genRec.Margin = new Thickness(0, Design.Gap8, 0, 0);
             genRec.Click += delegate { GenerateRecovery(); };
 
             StackPanel recStack = new StackPanel();
@@ -409,12 +409,12 @@ namespace QLock
         FrameworkElement BuildPreviewArea()
         {
             previewHost = new Border();
-            previewHost.Height = 176;
-            previewHost.CornerRadius = new CornerRadius(10);
+            previewHost.Height = 160;
+            previewHost.CornerRadius = new CornerRadius(Design.RadiusCard);
             previewHost.BorderThickness = new Thickness(1);
-            previewHost.BorderBrush = Ui.Fg(28, 255, 255, 255);
+            previewHost.BorderBrush = Ui.Line;
             previewHost.ClipToBounds = true;
-            previewHost.Margin = new Thickness(0, 2, 0, 8);
+            previewHost.Margin = new Thickness(0, Design.Gap4, 0, Design.Gap12);
             RefreshPreview();
             return previewHost;
         }
@@ -528,14 +528,14 @@ namespace QLock
             {
                 input.Background = Brushes.Transparent;
                 input.BorderThickness = new Thickness(0, 0, 0, 1);
-                input.BorderBrush = Ui.BrushOf(t.Input.Border, Ui.Fg(80, 255, 255, 255));
+                input.BorderBrush = Ui.BrushOf(t.Input.Border, Ui.InputBorder);
             }
             else
             {
-                input.Background = Ui.BrushOf(t.Input.Bg, Ui.Fg(30, 255, 255, 255));
+                input.Background = Ui.BrushOf(t.Input.Bg, Ui.InputBg);
                 input.CornerRadius = new CornerRadius(t.Input.Radius);
                 input.BorderThickness = new Thickness(1);
-                input.BorderBrush = Ui.BrushOf(t.Input.Border, Ui.Fg(80, 255, 255, 255));
+                input.BorderBrush = Ui.BrushOf(t.Input.Border, Ui.InputBorder);
             }
             TextBlock hint = Ui.Text("锁屏密码", Math.Max(10, t.Input.Size - 1),
                 Ui.BrushOf(t.Input.Hint, Ui.TextSecondary), FontWeights.Normal);
@@ -545,12 +545,12 @@ namespace QLock
 
             bool outline = string.Equals(t.Button.Kind, "outline", StringComparison.OrdinalIgnoreCase);
             bool flat = string.Equals(t.Button.Kind, "text", StringComparison.OrdinalIgnoreCase);
-            Brush btnBg = flat ? Brushes.Transparent : Ui.BrushOf(t.Button.Bg, Ui.Fg(255, 58, 118, 232));
+            Brush btnBg = flat ? Brushes.Transparent : Ui.BrushOf(t.Button.Bg, Ui.AccentStrong);
             Brush btnFg = Ui.BrushOf(t.Button.Fg, Brushes.White);
             Brush btnHover = string.IsNullOrEmpty(t.Button.Hover)
-                ? Ui.Shade(t.Button.Bg, Ui.Fg(255, 78, 138, 250))
-                : Ui.BrushOf(t.Button.Hover, Ui.Fg(255, 78, 138, 250));
-            Brush btnBorder = outline ? Ui.BrushOf(t.Button.Border, Ui.Fg(90, 255, 255, 255)) : null;
+                ? Ui.Shade(t.Button.Bg, Ui.AccentHover)
+                : Ui.BrushOf(t.Button.Hover, Ui.AccentHover);
+            Brush btnBorder = outline ? Ui.BrushOf(t.Button.Border, Ui.ChipBorder) : null;
             Button unlock = Ui.StyledButton("解锁", t.Button.Height, t.Button.Radius, btnBg, btnFg, btnHover, btnBorder, t.Button.Size);
             unlock.Focusable = false;
             unlock.IsHitTestVisible = false;
@@ -643,9 +643,9 @@ namespace QLock
             foreach (LockTheme t in all)
             {
                 bool on = t.Id == cfg.ThemeId;
-                Brush bg = on ? Ui.Fg(255, 96, 150, 250) : Ui.Fg(35, 255, 255, 255);
+                Brush bg = on ? Ui.Accent : Ui.ChipSurface;
                 Brush fg = on ? Brushes.White : Ui.TextPrimary;
-                Button b = Ui.StyledButton(t.Name, 30, 15, bg, fg, Ui.Fg(90, 255, 255, 255), null, 12.5);
+                Button b = Ui.StyledButton(t.Name, Design.ChipHeight, Design.ChipHeight / 2, bg, fg, Ui.ChipBorder, null, 12.5);
                 b.Width = 118;
                 b.Margin = new Thickness(0, 4, 8, 0);
                 string id = t.Id;
@@ -654,7 +654,7 @@ namespace QLock
                 themeWrap.Children.Add(b);
             }
 
-            Button folder = Ui.StyledButton("主题文件夹", 30, 15, Ui.Fg(35, 255, 255, 255), Ui.TextPrimary, Ui.Fg(90, 255, 255, 255), null, 12.5);
+            Button folder = Ui.StyledButton("主题文件夹", Design.ChipHeight, Design.ChipHeight / 2, Ui.ChipSurface, Ui.TextPrimary, Ui.ChipBorder, null, 12.5);
             folder.Width = 118;
             folder.Margin = new Thickness(0, 4, 8, 0);
             folder.Click += delegate { OpenThemeFolder(); };
@@ -782,7 +782,7 @@ namespace QLock
         {
             StackPanel pane = new StackPanel();
 
-            TextBlock ver = Ui.Text(Updater.VersionText(Updater.CurrentVersion()), 13, Ui.TextPrimary, FontWeights.Normal);
+            TextBlock ver = Ui.Text(Updater.VersionText(Updater.CurrentVersion()), Design.FontBody, Ui.TextPrimary, FontWeights.Normal);
             ver.VerticalAlignment = VerticalAlignment.Center;
 
             StackPanel verRow = new StackPanel();
@@ -791,7 +791,7 @@ namespace QLock
 
             Button check = Ui.Button("检查更新", false);
             check.Width = 100;
-            check.Margin = new Thickness(12, 0, 0, 0);
+            check.Margin = new Thickness(Design.Gap12, 0, 0, 0);
             check.Click += delegate { if (onCheckUpdate != null) onCheckUpdate(); };
             verRow.Children.Add(check);
 
@@ -800,7 +800,7 @@ namespace QLock
             string files = "配置：" + ConfigStore.FilePath + "\n" +
                            "日志：" + Log.FilePath + "\n" +
                            "主题：" + Themes.Dir;
-            TextBlock loc = Ui.Text(files, 11.5, Ui.TextSecondary, FontWeights.Normal);
+            TextBlock loc = Ui.Text(files, Design.FontTiny, Ui.TextSecondary, FontWeights.Normal);
             loc.TextWrapping = TextWrapping.Wrap;
             pane.Children.Add(Block("文件位置", loc));
 

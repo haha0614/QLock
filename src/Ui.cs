@@ -24,6 +24,23 @@ namespace QLock
         public static readonly Brush Error = Fg(255, 255, 125, 125);
         public static readonly Brush Good = Fg(255, 130, 210, 140);
 
+        // 强调色的几个档位：实心按钮、悬停、按下、导航选中底色
+        public static readonly Brush AccentStrong = Fg(255, 58, 118, 232);
+        public static readonly Brush AccentHover = Fg(255, 78, 138, 250);
+        public static readonly Brush AccentPressed = Fg(255, 42, 96, 200);
+        public static readonly Brush AccentSoft = Fg(46, 96, 150, 250);
+
+        public static readonly Brush Surface = Fg(255, 24, 27, 35);
+        public static readonly Brush SurfaceNav = Fg(255, 18, 21, 28);
+        public static readonly Brush SurfaceFooter = Fg(255, 20, 23, 30);
+        public static readonly Brush Line = Fg(30, 255, 255, 255);
+        public static readonly Brush RowLine = Fg(24, 255, 255, 255);
+        public static readonly Brush InputBg = Fg(30, 255, 255, 255);
+        public static readonly Brush InputBorder = Fg(80, 255, 255, 255);
+        public static readonly Brush ChipSurface = Fg(35, 255, 255, 255);
+        public static readonly Brush ChipBorder = Fg(90, 255, 255, 255);
+        public static readonly Brush SwitchTrack = Fg(50, 255, 255, 255);
+
         public static TextBlock Text(string text, double size, Brush brush, FontWeight weight)
         {
             TextBlock tb = new TextBlock();
@@ -37,12 +54,12 @@ namespace QLock
 
         public static TextBlock Label(string text)
         {
-            return Text(text, 13, TextSecondary, FontWeights.Normal);
+            return Text(text, Design.FontBody, TextSecondary, FontWeights.Normal);
         }
 
         public static void StyleInput(Control c)
         {
-            StyleInput(c, false, 34, 7, Fg(30, 255, 255, 255), Fg(80, 255, 255, 255), Brushes.White, 14);
+            StyleInput(c, false, Design.ControlHeight, Design.RadiusControl, InputBg, InputBorder, Brushes.White, Design.FontControl);
         }
 
         public static void StyleInput(Control c, bool multiline)
@@ -83,18 +100,18 @@ namespace QLock
         {
             Button b = new Button();
             b.Content = text;
-            b.Height = 38;
-            b.FontSize = 14;
+            b.Height = Design.ControlHeight;
+            b.FontSize = Design.FontControl;
             b.FontFamily = Font;
             b.Cursor = Cursors.Hand;
             b.Foreground = Brushes.White;
             b.BorderThickness = new Thickness(0);
-            b.Background = primary ? Fg(255, 58, 118, 232) : Fg(45, 255, 255, 255);
+            b.Background = primary ? AccentStrong : ChipSurface;
 
             ControlTemplate template = new ControlTemplate(typeof(Button));
             FrameworkElementFactory border = new FrameworkElementFactory(typeof(Border));
             border.Name = "bg";
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(Design.RadiusControl));
             border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
             FrameworkElementFactory presenter = new FrameworkElementFactory(typeof(ContentPresenter));
             presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
@@ -105,13 +122,13 @@ namespace QLock
             Trigger hover = new Trigger();
             hover.Property = UIElement.IsMouseOverProperty;
             hover.Value = true;
-            hover.Setters.Add(new Setter(Border.BackgroundProperty, Fg(255, 78, 138, 250), "bg"));
+            hover.Setters.Add(new Setter(Border.BackgroundProperty, AccentHover, "bg"));
             template.Triggers.Add(hover);
 
             Trigger pressed = new Trigger();
             pressed.Property = ButtonBase.IsPressedProperty;
             pressed.Value = true;
-            pressed.Setters.Add(new Setter(Border.BackgroundProperty, Fg(255, 42, 96, 200), "bg"));
+            pressed.Setters.Add(new Setter(Border.BackgroundProperty, AccentPressed, "bg"));
             template.Triggers.Add(pressed);
 
             b.Template = template;
@@ -222,20 +239,6 @@ namespace QLock
             return br;
         }
 
-        public static CheckBox Check(bool value, string text, double topMargin)
-        {
-            CheckBox cb = new CheckBox();
-            cb.Content = text;
-            cb.IsChecked = value;
-            cb.FontFamily = Font;
-            cb.FontSize = 13.5;
-            cb.Foreground = TextPrimary;
-            cb.Margin = new Thickness(0, topMargin, 0, 0);
-            cb.Cursor = Cursors.Hand;
-            cb.VerticalContentAlignment = VerticalAlignment.Center;
-            return cb;
-        }
-
         // 开关滑块：保留 CheckBox 的语义（UIA 里仍是勾选控件、空格能切换），只换外观。
         public static CheckBox Switch(bool value)
         {
@@ -243,8 +246,8 @@ namespace QLock
             cb.IsChecked = value;
             cb.Cursor = Cursors.Hand;
             cb.Foreground = Brushes.White;
-            cb.Background = Fg(50, 255, 255, 255);
-            cb.BorderBrush = Fg(40, 255, 255, 255);
+            cb.Background = SwitchTrack;
+            cb.BorderBrush = Ui.Fg(40, 255, 255, 255);
             cb.BorderThickness = new Thickness(1);
             cb.VerticalAlignment = VerticalAlignment.Center;
 
@@ -278,8 +281,8 @@ namespace QLock
             Trigger on = new Trigger();
             on.Property = CheckBox.IsCheckedProperty;
             on.Value = true;
-            on.Setters.Add(new Setter(Border.BackgroundProperty, Fg(255, 58, 118, 232), "track"));
-            on.Setters.Add(new Setter(Border.BorderBrushProperty, Fg(255, 58, 118, 232), "track"));
+            on.Setters.Add(new Setter(Border.BackgroundProperty, AccentStrong, "track"));
+            on.Setters.Add(new Setter(Border.BorderBrushProperty, AccentStrong, "track"));
             on.Setters.Add(new Setter(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Right, "knob"));
             on.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(0, 0, 4, 0), "knob"));
             template.Triggers.Add(on);
@@ -288,26 +291,5 @@ namespace QLock
             return cb;
         }
 
-        public static Border Card(UIElement content, double topMargin)
-        {
-            Border card = new Border();
-            card.CornerRadius = new CornerRadius(10);
-            card.Padding = new Thickness(18, 14, 18, 16);
-            card.Background = Fg(210, 26, 30, 40);
-            card.BorderThickness = new Thickness(1);
-            card.BorderBrush = Fg(40, 255, 255, 255);
-            card.Margin = new Thickness(0, topMargin, 0, 0);
-            card.Child = content;
-            return card;
-        }
-
-        public static StackPanel Section(string title)
-        {
-            StackPanel sp = new StackPanel();
-            TextBlock head = Text(title, 13, Fg(255, 120, 165, 235), FontWeights.SemiBold);
-            head.Margin = new Thickness(0, 0, 0, 10);
-            sp.Children.Add(head);
-            return sp;
-        }
     }
 }

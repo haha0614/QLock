@@ -269,8 +269,8 @@ namespace QLock
         void StyleLockInput(PasswordBox box)
         {
             Ui.StyleInput(box, false, theme.Input.Height, theme.Input.Radius,
-                Ui.BrushOf(theme.Input.Bg, Ui.Fg(30, 255, 255, 255)),
-                Ui.BrushOf(theme.Input.Border, Ui.Fg(80, 255, 255, 255)),
+                Ui.BrushOf(theme.Input.Bg, Ui.InputBg),
+                Ui.BrushOf(theme.Input.Border, Ui.InputBorder),
                 Ui.BrushOf(theme.Input.Fg, Brushes.White),
                 theme.Input.Size);
             if (Underline)
@@ -284,12 +284,12 @@ namespace QLock
         {
             bool outline = string.Equals(theme.Button.Kind, "outline", StringComparison.OrdinalIgnoreCase);
             bool flat = string.Equals(theme.Button.Kind, "text", StringComparison.OrdinalIgnoreCase);
-            Brush bg = flat ? Brushes.Transparent : Ui.BrushOf(theme.Button.Bg, Ui.Fg(255, 58, 118, 232));
+            Brush bg = flat ? Brushes.Transparent : Ui.BrushOf(theme.Button.Bg, Ui.AccentStrong);
             Brush fg = Ui.BrushOf(theme.Button.Fg, Brushes.White);
             Brush hover = string.IsNullOrEmpty(theme.Button.Hover)
-                ? Ui.Shade(theme.Button.Bg, Ui.Fg(255, 78, 138, 250))
-                : Ui.BrushOf(theme.Button.Hover, Ui.Fg(255, 78, 138, 250));
-            Brush border = outline ? Ui.BrushOf(theme.Button.Border, Ui.Fg(90, 255, 255, 255)) : null;
+                ? Ui.Shade(theme.Button.Bg, Ui.AccentHover)
+                : Ui.BrushOf(theme.Button.Hover, Ui.AccentHover);
+            Brush border = outline ? Ui.BrushOf(theme.Button.Border, Ui.ChipBorder) : null;
             return Ui.StyledButton(text, theme.Button.Height, theme.Button.Radius, bg, fg, hover, border, theme.Button.Size);
         }
 
