@@ -914,7 +914,7 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
     gfx::Text(dc, fSmall, L"MIT 协议 · https://github.com/haha0614/QLock",
               D2D1::RectF(left, y, right, y + 22), Color(kTextDim));
     y += 22;
-    gfx::Text(dc, fSmall, L"0.3.0 的 WPF 实现搬到了 haha0614/QLock-CSharp",
+    gfx::Text(dc, fSmall, L"C# 版（0.3.0）在 haha0614/QLock-CSharp",
               D2D1::RectF(left, y, right, y + 22), Color(kTextMuted));
     y += 22;
     scrollMax = (std::max)(0.0f, (y + scroll) - bottom);

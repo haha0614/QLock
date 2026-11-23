@@ -3,8 +3,13 @@
 Windows 上的一个锁屏小工具。锁定之后桌面变成一张模糊的截图，中间是时钟和密码框，输对密码就回桌面。
 密码是 QLock 自己的，和 Windows 账户没有关系，所以不会把 Windows 账户锁住、也不用记两个密码。
 
-已发布的版本里，0.3.0 是 WPF 实现，MIT 协议，未签名。那套 WPF 源码和历史搬到了单独一个仓库：[haha0614/QLock-CSharp](https://github.com/haha0614/QLock-CSharp)，本仓库只放 C++ 版。
-主分支现在是用 C++ 重写的版本，版本号从 0.1.0 重新起算，锁屏画面和设置窗五页都能用了；检查更新能自己下载新版、校验 SHA256 后原地替换并重启，平时启动还会每天静默查一次。下面写的主要是 WPF 版的完整体验，C++ 版没搬过来的地方会单独标出来。
+QLock 有两个实现，分开放在两个仓库里，各自发版、各自检查更新：
+
+- [haha0614/QLock](https://github.com/haha0614/QLock)（这个仓库）：C++ 重写版，版本号从 0.1.0 起算
+- [haha0614/QLock-CSharp](https://github.com/haha0614/QLock-CSharp)：C# / WPF 版，当前 0.3.0
+
+两个版本都是 MIT 协议、未签名。
+这个仓库的版本号从 0.1.0 重新起算，锁屏画面和设置窗五页都能用了；检查更新能自己下载新版、校验 SHA256 后原地替换并重启，平时启动还会每天静默查一次。下面按这个仓库（C++ 版）的现状写，和 C# 版不一样的地方会单独标出来。
 
 ## 截图
 
@@ -158,4 +163,4 @@ Windows 不允许给已经跑起来的进程提权。不在管理员组的账号
 
 图标 `src\QLock.ico` 由 `tools\makeicon.ps1` 生成，用的是 QTools 那只兔子（Lucide rabbit，ISC）。
 版本号写在 `src\qlock.rc` 里，推 v 开头的 tag 会触发 release.yml 发版。
-0.3.0 的那套 WPF 源码在 [haha0614/QLock-CSharp](https://github.com/haha0614/QLock-CSharp)，要参考或者回头修它就去那个仓库。
+C# / WPF 版的源码在 [haha0614/QLock-CSharp](https://github.com/haha0614/QLock-CSharp)，那边有自己的 build.cmd / test.cmd 和发版流程。
