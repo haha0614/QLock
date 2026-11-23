@@ -35,6 +35,11 @@ int wmain(int argc, wchar_t** argv) {
 
     lockview::View view;
     view.theme = themes::Find(app::cfg.ThemeId);
+    if (argc > 4 && _wcsicmp(argv[4], L"typed") == 0) {
+        // 输了两位的状态，用来看圆点和光标的画法。
+        view.password = L"12";
+        view.caretOn = true;
+    }
     if (argc > 4 && _wcsicmp(argv[4], L"recovery") == 0) {
         // 不锁屏也能看一眼恢复码面板长什么样。
         view.recovering = true;

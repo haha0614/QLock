@@ -305,9 +305,9 @@ void View::DrawField(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const std::
     float textLeft = box.left + inset;
     float textW = box.right - textLeft - inset;
     if (text.empty()) {
-        gfx::Text(dc, editFmt, hint, D2D1::RectF(textLeft, box.top, textLeft + textW, box.bottom),
+        // 空的时候光标就停在左内边距上，提示文字往右让一点，免得压在竖线上。
+        gfx::Text(dc, editFmt, hint, D2D1::RectF(textLeft + 12.0f, box.top, textLeft + textW, box.bottom),
                   themes::Color(theme.Input.Hint, gfx::Color(0xFF7B8391)));
-        return;
     }
 
     D2D1_COLOR_F fg = themes::Color(theme.Input.Fg, gfx::Color(0xFFFFFFFF));
