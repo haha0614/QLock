@@ -121,6 +121,7 @@ enum {
     ID_BLOCK_HOTKEYS = 365,
     ID_CHECK_UPDATE = 366,
     ID_SKIP_UPDATE = 367,
+    ID_CHANGELOG = 368,
     ID_FONT_UI = 340,
     ID_FONT_CLOCK = 341,
     ID_FONT_CLOCK_ON = 342,
@@ -931,10 +932,13 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
         bool busy = updateState == U_CHECKING || updateState == U_DOWNLOADING || updateState == U_INSTALLING ||
                     updateState == U_READY;
         bool skip = updateState == U_NEWER;
-        float checkLeft = right - 100 - (skip ? 104 : 0);
-        // 两个按钮并排时，标签栏留 200 就放不下版本号了，这一行改窄一点。
+        // 右边贴着内容区右缘排：下载并升级在最后，跳过这个版本在它左边。
+        const float checkW = 100.0f;
+        const float skipW = 104.0f;
+        const float checkLeft = right - checkW;
+        const float skipLeft = checkLeft - skipW - design::Gap8;
         float valueLeft = skip ? left + 100 : left + 200;
-        float valueRight = (skip ? checkLeft - 104 : checkLeft) - design::Gap8;
+        float valueRight = (skip ? skipLeft : checkLeft) - design::Gap8;
         gfx::Text(dc, fBody, updater::CurrentVersion(),
                   D2D1::RectF(valueLeft, y, valueRight, y + RowH), Color(design::TextDim));
 
@@ -944,7 +948,7 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
         else if (updateState == U_DOWNLOADING) label = L"下载中…";
         else if (updateState == U_INSTALLING || updateState == U_READY) label = L"正在安装…";
 
-        Rect check{ checkLeft, y + design::Gap12, checkLeft + 100, y + design::Gap12 + ControlH };
+        Rect check{ checkLeft, y + design::Gap12, checkLeft + checkW, y + design::Gap12 + ControlH };
         Button(check, label, updateState == U_NEWER, hot == ID_CHECK_UPDATE, !busy);
         if (!busy) {
             Widget wg;
@@ -954,7 +958,7 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
             widgets.push_back(wg);
         }
         if (skip) {
-            Rect skipRect{ checkLeft - 104, y + design::Gap12, checkLeft - design::Gap8, y + design::Gap12 + ControlH };
+            Rect skipRect{ skipLeft, y + design::Gap12, skipLeft + skipW, y + design::Gap12 + ControlH };
             Button(skipRect, L"跳过这个版本", false, hot == ID_SKIP_UPDATE, true);
             Widget wg;
             wg.id = ID_SKIP_UPDATE;
@@ -966,6 +970,21 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
     y += RowH - design::Gap8;
     gfx::Text(dc, fSmall, L"C++ 重写，Direct2D 直绘", D2D1::RectF(left, y, right, y + 22), Color(design::TextMuted));
     y += 26;
+
+    RowLine(y, left, right);
+    gfx::Text(dc, fBody, L"更新日志", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
+    gfx::Text(dc, fSmall, L"每个版本改了什么", D2D1::RectF(left + 200, y, right - 120 - design::Gap8, y + RowH),
+              Color(design::TextMuted));
+    {
+        Rect logBtn{ right - 120, y + design::Gap12, right, y + design::Gap12 + ControlH };
+        Button(logBtn, L"查看更新日志", false, hot == ID_CHANGELOG, true);
+        Widget wg;
+        wg.id = ID_CHANGELOG;
+        wg.kind = K_BTN;
+        wg.rect = logBtn;
+        widgets.push_back(wg);
+    }
+    y += RowH - design::Gap8;
 
     RowLine(y, left, right);
     gfx::Text(dc, fBody, L"文件位置", D2D1::RectF(left, y, left + 200, y + 30), Color(design::Text));
@@ -1386,6 +1405,11 @@ void Settings::Apply(int id) {
     if (id == ID_CHECK_UPDATE) {
         if (updateState == U_NEWER) StartDownload();
         else CheckUpdate();
+        return;
+    }
+    if (id == ID_CHANGELOG) {
+        ShellExecuteW(nullptr, L"open", L"https://github.com/haha0614/QLock/blob/main/CHANGELOG.md", nullptr, nullptr,
+                      SW_SHOWNORMAL);
         return;
     }
     if (id == ID_SKIP_UPDATE) {
