@@ -224,10 +224,10 @@ int main(int, char**) {
     Check(fonts::Label(L"Consolas") == L"Consolas", L"family label is the family name");
 
     Out(L"== 11. 检查更新 ==");
-    Check(updater::IsNewer(L"v0.4.1", L"0.4.0"), L"v0.4.1 is newer than 0.4.0");
-    Check(updater::IsNewer(L"9.9.9", L"0.4.0"), L"tag without v still compares");
-    Check(!updater::IsNewer(L"v0.4.0", L"0.4.0"), L"same version is not newer");
-    Check(!updater::IsNewer(L"0.3.0", L"0.4.0"), L"older tag is not newer");
+    Check(updater::IsNewer(L"v0.1.1", L"0.1.0"), L"v0.1.1 is newer than 0.1.0");
+    Check(updater::IsNewer(L"9.9.9", L"0.1.0"), L"tag without v still compares");
+    Check(!updater::IsNewer(L"v0.1.0", L"0.1.0"), L"same version is not newer");
+    Check(!updater::IsNewer(L"0.0.9", L"0.1.0"), L"older tag is not newer");
     const std::wstring sumsText = L"fff0  other.exe\r\nBA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD  QLock.exe\r\n";
     Check(updater::ExpectedHash(sumsText) == L"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
           L"expected hash picked and lowercased");

@@ -4,9 +4,9 @@
 
 // 检查、下载、校验、原地替换。这里不碰 UI，进度和结果都通过回调和返回值交出去。
 namespace updater {
-std::wstring CurrentVersion();                       // 取 exe 的版本资源，形如 "0.4.0"
+std::wstring CurrentVersion();                       // 取 exe 的版本资源，形如 "0.1.0"
 bool IsNewer(const std::wstring& tag,
-             const std::wstring& current);           // "v0.4.1" 比 "0.4.0" 新
+             const std::wstring& current);           // "v0.1.1" 比 "0.1.0" 新
 bool Check(std::wstring* tag, std::wstring* page, std::wstring* error);
 
 std::wstring ExeUrl();                               // 新版 exe 的下载地址
