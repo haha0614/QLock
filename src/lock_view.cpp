@@ -5,6 +5,7 @@
 #include "qlock.h"
 #include <d2d1effects.h>
 #include <algorithm>
+#include <vector>
 
 namespace lockview {
 namespace {
@@ -21,8 +22,66 @@ unsigned CfgColor(unsigned fallback) { return fallback; }
 View::~View() {
     Release(&blur);
     Release(&wallpaper);
+    ReleaseMask();
     ReleaseFormats();
     if (snapshot) { DeleteObject(snapshot); snapshot = nullptr; }
+}
+
+void View::ReleaseMask() {
+    Release(&maskBrush);
+    Release(&maskBitmap);
+    maskW = maskH = 0.0f;
+}
+
+// 整张显示的照片四周做一圈 alpha 渐变，和模糊底图之间就没有硬边了。
+// 只有留白的那两条边需要羽化：铺满的边羽化会露出底图，反而脏。
+bool View::EnsureMask(ID2D1DeviceContext* dc, float w, float h, bool bleedX, bool bleedY) {
+    if (!dc || w < 8.0f || h < 8.0f) return false;
+    if (maskBitmap && maskBrush && bleedX == maskBleedX && bleedY == maskBleedY && (int)maskW == (int)w &&
+        (int)maskH == (int)h) {
+        return true;
+    }
+    ReleaseMask();
+    maskBleedX = bleedX;
+    maskBleedY = bleedY;
+    const int iw = (int)w, ih = (int)h;
+    const float feather = (std::max)(18.0f, (std::min)(48.0f, (std::min)(w, h) * 0.06f));
+    std::vector<BYTE> pixels((size_t)iw * ih * 4, 0);
+    for (int y = 0; y < ih; ++y) {
+        for (int x = 0; x < iw; ++x) {
+            float a = 1.0f;
+            if (maskBleedX) {
+                a = (std::min)(a, (std::min)((float)x, (float)(iw - 1 - x)) / feather);
+            }
+            if (maskBleedY) {
+                a = (std::min)(a, (std::min)((float)y, (float)(ih - 1 - y)) / feather);
+            }
+            if (a > 1.0f) a = 1.0f;
+            if (a < 0.0f) a = 0.0f;
+            a = a * a * (3.0f - 2.0f * a);   // smoothstep，边界更软
+            const BYTE v = (BYTE)(a * 255.0f + 0.5f);
+            BYTE* p = &pixels[((size_t)y * iw + x) * 4];
+            p[0] = v; p[1] = v; p[2] = v; p[3] = v;   // 预乘白
+        }
+    }
+    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+        D2D1_BITMAP_OPTIONS_NONE, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+    if (FAILED(dc->CreateBitmap(D2D1::SizeU(iw, ih), pixels.data(), (UINT32)iw * 4, props, &maskBitmap))) {
+        app::Log(L"mask: create bitmap failed");
+        return false;
+    }
+    D2D1_BITMAP_BRUSH_PROPERTIES1 brushProps = {};
+    brushProps.extendModeX = D2D1_EXTEND_MODE_CLAMP;
+    brushProps.extendModeY = D2D1_EXTEND_MODE_CLAMP;
+    brushProps.interpolationMode = D2D1_INTERPOLATION_MODE_LINEAR;
+    if (FAILED(dc->CreateBitmapBrush(maskBitmap, brushProps, &maskBrush))) {
+        app::Log(L"mask: create brush failed");
+        Release(&maskBitmap);
+        return false;
+    }
+    maskW = w;
+    maskH = h;
+    return true;
 }
 
 void View::SetSnapshot(HBITMAP bmp) {
@@ -62,6 +121,7 @@ void View::CreateFormats() {
 void View::DropDeviceResources() {
     Release(&blur);
     Release(&wallpaper);
+    ReleaseMask();
 }
 
 void View::Reload(ID2D1DeviceContext* dc) {
@@ -186,11 +246,25 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
         const float cover = (std::max)(w / img.width, h / img.height);
         const float fit = photo ? (std::min)(w / img.width, h / img.height) : cover;
 
+        // 图层遮罩是在设备像素里取样的（预览会带一层缩放），遮罩按屏幕像素做，再按同样的比例摆回去。
+        const float viewScale = (std::max)(0.05f, sqrtf(saved.m11 * saved.m11 + saved.m12 * saved.m12));
+
         // 模糊半径是屏幕上的像素，效果作用在原图坐标里，先换算回原图尺度。
-        auto blit = [&](float scale, float screenBlur) {
+        auto blit = [&](float scale, float screenBlur, bool feathered) {
             const float dw = img.width * scale, dh = img.height * scale;
             const D2D1_RECT_F dest = D2D1::RectF((w - dw) / 2, (h - dh) / 2, (w + dw) / 2, (h + dh) / 2);
             EnsureBlur(dc, screenBlur > 0 ? screenBlur * 0.5f / (scale > 0 ? scale : 1.0f) : 0.0f);
+            // 羽化：整张图外面套一层四周渐隐的遮罩，和模糊底图之间就没有硬边。
+            bool layered = false;
+            if (feathered && EnsureMask(dc, dw * viewScale, dh * viewScale, dw < w - 1.0f, dh < h - 1.0f)) {
+                maskBrush->SetTransform(D2D1::Matrix3x2F::Translation(saved.dx + dest.left * viewScale,
+                                                                    saved.dy + dest.top * viewScale));
+                D2D1_LAYER_PARAMETERS1 lp = D2D1::LayerParameters1(
+                    D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), 1.0f,
+                    maskBrush, D2D1_LAYER_OPTIONS1_NONE);
+                dc->PushLayer(lp, nullptr);
+                layered = true;
+            }
             if (blur && screenBlur > 0) {
                 dc->SetTransform(D2D1::Matrix3x2F::Scale(dw / img.width, dh / img.height) *
                                  D2D1::Matrix3x2F::Translation(dest.left, dest.top));
@@ -199,13 +273,15 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
             } else {
                 dc->DrawBitmap(wallpaper, dest, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
             }
+            if (layered) dc->PopLayer();
         };
 
-        if (fit < cover - 0.001f) {
+        const bool needFeather = fit < cover - 0.001f;
+        if (needFeather) {
             // 图比屏幕方：先铺一层放大模糊的同一张图填满两边，再把整张图摆上去。
-            blit(cover, radius > 0 ? radius : 18.0f);
+            blit(cover, radius > 0 ? radius : 18.0f, false);
         }
-        blit(fit, radius);
+        blit(fit, radius, needFeather);
         dc->PopAxisAlignedClip();
     }
 

@@ -47,6 +47,13 @@ private:
     HBITMAP snapshot = nullptr;
     // 背景来自图片文件（要整张显示）还是抓屏（本身就铺满），两者摆放方式不同。
     bool photo = false;
+    // 整张显示的照片和模糊铺底之间的羽化遮罩（白，alpha 渐变），尺寸变了才重建。
+    ID2D1Bitmap1* maskBitmap = nullptr;
+    ID2D1BitmapBrush1* maskBrush = nullptr;
+    float maskW = 0.0f;
+    float maskH = 0.0f;
+    bool maskBleedX = false;
+    bool maskBleedY = false;
     ID2D1Bitmap1* wallpaper = nullptr;
     ID2D1Effect* blur = nullptr;
     IDWriteTextFormat* clockFmt = nullptr;
@@ -60,11 +67,13 @@ private:
     IDWriteTextFormat* hintFmt = nullptr;
 
     void ReleaseFormats();
+    void ReleaseMask();
     void CreateFormats();
     void DrawField(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const std::wstring& text, const wchar_t* hint,
                    bool enabled);
     void DrawButton(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const wchar_t* label);
     void LoadWallpaper(ID2D1DeviceContext* dc);
+    bool EnsureMask(ID2D1DeviceContext* dc, float w, float h, bool bleedX, bool bleedY);
     float BlurRadius() const;
     void EnsureBlur(ID2D1DeviceContext* dc, float sigma);
 };
