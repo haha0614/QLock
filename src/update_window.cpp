@@ -55,6 +55,8 @@ std::wstring CleanLine(std::wstring line) {
         line = line.substr(i);
     }
     if (line.rfind(L"- ", 0) == 0) line = L"• " + line.substr(2);
+    // 行内的反引号包住的命令名，直接去掉引号，读起来更像一句话。
+    line.erase(std::remove(line.begin(), line.end(), L'`'), line.end());
     while (!line.empty() && (line.back() == L' ' || line.back() == L'\t')) line.pop_back();
     return line;
 }
