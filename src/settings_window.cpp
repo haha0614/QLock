@@ -1301,6 +1301,32 @@ void Settings::ClickAt(float x, float y, bool down) {
 }
 
 // ---- 窗口 ----
+namespace {
+
+// 这块屏的可用区域，取不到就用主屏。
+RECT WorkOf(HMONITOR mon) {
+    MONITORINFO mi = { sizeof(mi) };
+    if (mon && GetMonitorInfoW(mon, &mi)) return mi.rcWork;
+    return RECT{ 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
+}
+
+// 有真实位置的 owner 就居中在它上面，否则居中在工作区；最后夹进工作区，
+// 免得从托盘打开时对着隐藏的消息窗（坐标 0,0、尺寸为空）算出屏幕外的位置。
+POINT PlaceFor(HWND ownerWnd, HMONITOR mon, int ww, int wh) {
+    RECT work = WorkOf(mon);
+    RECT o = {};
+    const bool anchored = ownerWnd && IsWindow(ownerWnd) && IsWindowVisible(ownerWnd) &&
+                          GetWindowRect(ownerWnd, &o) && !IsRectEmpty(&o);
+    const RECT from = anchored ? o : work;
+    int x = from.left + ((from.right - from.left) - ww) / 2;
+    int y = from.top + ((from.bottom - from.top) - wh) / 2;
+    x = (std::max)((int)work.left, (std::min)(x, (int)work.right - ww));
+    y = (std::max)((int)work.top, (std::min)(y, (int)work.bottom - wh));
+    return POINT{ x, y };
+}
+
+}  // namespace
+
 bool Settings::Create(HWND ownerWnd) {
     owner = ownerWnd;
     if (!gfx::Init()) {
@@ -1325,24 +1351,14 @@ bool Settings::Create(HWND ownerWnd) {
 
     RECT frame = { 0, 0, (LONG)(WinW * scale), (LONG)(WinH * scale) };
     AdjustWindowRectEx(&frame, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, FALSE, 0);
-    int ww = frame.right - frame.left, wh = frame.bottom - frame.top;
-    int sx = 0, sy = 0;
-    if (ownerWnd && IsWindow(ownerWnd)) {
-        RECT o;
-        GetWindowRect(ownerWnd, &o);
-        sx = o.left + ((o.right - o.left) - ww) / 2;
-        sy = o.top + ((o.bottom - o.top) - wh) / 2;
-    } else {
-        MONITORINFO mi = { sizeof(mi) };
-        RECT work = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
-        if (GetMonitorInfoW(mon, &mi)) work = mi.rcWork;
-        sx = work.left + ((work.right - work.left) - ww) / 2;
-        sy = work.top + ((work.bottom - work.top) - wh) / 2;
-    }
+    const int ww = frame.right - frame.left, wh = frame.bottom - frame.top;
+    const POINT at = PlaceFor(ownerWnd, mon, ww, wh);
+    const int sx = at.x, sy = at.y;
 
     hwnd = CreateWindowExW(0, kClass, L"QLock 设置", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
                            sx, sy, ww, wh, nullptr, nullptr, app::inst, this);
     if (!hwnd) return false;
+    app::Log(L"settings at %d,%d %dx%d", sx, sy, ww, wh);
 
     BOOL dark = TRUE;
     DwmSetWindowAttribute(hwnd, 20, &dark, sizeof(dark));
@@ -1380,8 +1396,11 @@ void Settings::ApplyScale(float s) {
     AdjustWindowRectEx(&frame, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, FALSE, 0);
     RECT cur = {};
     GetWindowRect(hwnd, &cur);
-    SetWindowPos(hwnd, nullptr, cur.left, cur.top, frame.right - frame.left, frame.bottom - frame.top,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
+    const int ww = frame.right - frame.left, wh = frame.bottom - frame.top;
+    const RECT work = WorkOf(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
+    const int x = (std::max)((int)work.left, (std::min)((int)cur.left, (int)work.right - ww));
+    const int y = (std::max)((int)work.top, (std::min)((int)cur.top, (int)work.bottom - wh));
+    SetWindowPos(hwnd, nullptr, x, y, ww, wh, SWP_NOZORDER | SWP_NOACTIVATE);
     Invalidate();
 }
 

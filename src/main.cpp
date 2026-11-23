@@ -197,7 +197,7 @@ bool IdleReached(int minutes) {
 
 LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == kShowSettings) {
-        SettingsShow(nullptr);
+        SettingsShow(g_main);
         return 0;
     }
     switch (msg) {
@@ -369,7 +369,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     if (args.empty() || HasArg(args, L"--tray", nullptr) || HasArg(args, L"--elevated", nullptr)) AutoCheckUpdate();
 
     if (HasArg(args, L"--settings", nullptr)) {
-        SettingsShow(nullptr);
+        SettingsShow(g_main);
     } else if (HasArg(args, L"--lock", nullptr)) {
         DoLock();
     } else if (args.empty() && app::cfg.LockOnStartup) {
