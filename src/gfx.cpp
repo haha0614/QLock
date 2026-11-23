@@ -120,6 +120,15 @@ void Text(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
     layout->Release();
 }
 
+void TextCentered(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
+                  const D2D1_RECT_F& box, D2D1_COLOR_F c) {
+    if (!fmt || s.empty()) return;
+    DWRITE_TEXT_ALIGNMENT prev = fmt->GetTextAlignment();
+    fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    Text(dc, fmt, s, box, c);
+    fmt->SetTextAlignment(prev);
+}
+
 float Measure(IDWriteTextFormat* fmt, const std::wstring& s) {
     if (!fmt || s.empty()) return 0;
     IDWriteTextLayout* layout = nullptr;

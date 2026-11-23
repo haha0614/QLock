@@ -341,20 +341,20 @@ public:
     void Button(const Rect& r, const std::wstring& text, bool primary, bool hovered, bool enabled = true) {
         if (!enabled) {
             gfx::FillRound(dc, Round(r, design::RadiusControl), Color(design::RowHover));
-            gfx::Text(dc, fControl, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(design::TextMuted));
+            gfx::TextCentered(dc, fControl, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(design::TextMuted));
             return;
         }
         unsigned bg = primary ? (hovered ? design::AccentHover : design::Accent) : (hovered ? design::ChipSurface : design::Hover);
         gfx::FillRound(dc, Round(r, design::RadiusControl), Color(bg));
         if (!primary) gfx::StrokeRound(dc, Round(r, design::RadiusControl), Color(design::ChipBorder), 1.0f);
-        gfx::Text(dc, fControl, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(design::Text));
+        gfx::TextCentered(dc, fControl, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(design::Text));
     }
 
     void Pill(const Rect& r, const std::wstring& text, bool on, bool hovered) {
         unsigned bg = on ? design::Accent : (hovered ? design::ChipBorder : design::ChipSurface);
         gfx::FillRound(dc, Round(r, ChipH / 2), Color(bg));
         if (!on) gfx::StrokeRound(dc, Round(r, ChipH / 2), Color(hovered ? design::ChipBorder : design::Line), 1.0f);
-        gfx::Text(dc, fSmall, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(on ? design::Text : design::TextDim));
+        gfx::TextCentered(dc, fSmall, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(on ? design::Text : design::TextDim));
     }
 
     void RowLine(float y, float left, float right) {
@@ -751,7 +751,8 @@ void Settings::LayoutUnlock(float left, float right, float top, float bottom) {
         passwordRect = Rect{ eye.l - design::Gap8 - 260, y + design::Gap12, eye.l - design::Gap8, y + design::Gap12 + ControlH };
         DrawField(passwordRect, passwordText, ID_EDIT_PASSWORD, !reveal, true, L"输入新密码");
         gfx::FillRound(dc, Round(eye, design::RadiusControl), Color(hot == ID_REVEAL ? design::ChipSurface : design::Hover));
-        gfx::Text(dc, fSmall, reveal ? L"隐藏" : L"显示", D2D1::RectF(eye.l, eye.t, eye.r, eye.b), Color(design::TextDim));
+        gfx::TextCentered(dc, fSmall, reveal ? L"隐藏" : L"显示", D2D1::RectF(eye.l, eye.t, eye.r, eye.b),
+                 Color(design::TextDim));
         Button(apply, L"设置", true, hot == ID_APPLY_PASSWORD);
         Widget a; a.id = ID_REVEAL; a.kind = K_BTN; a.rect = eye; widgets.push_back(a);
         Widget b; b.id = ID_APPLY_PASSWORD; b.kind = K_BTN; b.rect = apply; widgets.push_back(b);

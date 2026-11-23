@@ -34,6 +34,10 @@ void TextWrapped(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstr
                  const D2D1_RECT_F& box, D2D1_COLOR_F c);
 float Measure(IDWriteTextFormat* fmt, const std::wstring& s);
 
+// 水平居中：按钮、药丸、开关旁的小标签用它；普通文字仍用 Text（左对齐）。
+void TextCentered(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
+                  const D2D1_RECT_F& box, D2D1_COLOR_F c);
+
 // 字体名留空或系统里没有时退回微软雅黑 UI。
 IDWriteTextFormat* Format(const std::wstring& family, float size, int weight, DWRITE_TEXT_ALIGNMENT align);
 
