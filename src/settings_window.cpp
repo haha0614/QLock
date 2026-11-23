@@ -984,7 +984,7 @@ void Settings::CommitIdle() {
 // 关于页只管查；发现新版就开更新窗口，说明和下载都在那边。
 void Settings::ShowUpdateDialog(const std::wstring& tag, const std::wstring& notes) {
     updateState = U_IDLE;
-    SetStatus(L"发现新版本 " + tag + L"，更新说明已打开", false);
+    SetStatus(L"发现新版本 " + tag + L"，更新说明在弹窗里", false);
     Invalidate();
     UpdateShow(hwnd, tag, notes);
 }
@@ -1004,7 +1004,7 @@ void Settings::CheckUpdate() {
             result->tag = tag;
             result->notes = notes;
             result->newer = updater::IsNewer(tag, updater::CurrentVersion());
-            result->status = result->newer ? L"发现新版本 " + tag + L"，更新说明已打开"
+            result->status = result->newer ? L"发现新版本 " + tag + L"，更新说明在弹窗里"
                                            : L"已经是最新版本 " + updater::CurrentVersion();
         }
         if (!PostMessageW(target, WM_APP + 5, (WPARAM)result, 0)) delete result;
