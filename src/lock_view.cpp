@@ -72,6 +72,7 @@ void View::Reload(ID2D1DeviceContext* dc) {
 
 void View::LoadWallpaper(ID2D1DeviceContext* dc) {
     if (wallpaper || !dc) return;
+    photo = false;
     // 只有背景样式选了「自定义图片」才用文件；切到纯色/截图时路径还留着，但不再显示。
     const std::wstring path = !imageOverride.empty() ? imageOverride
                              : (app::BackgroundKind() == 2 ? app::cfg.BackgroundImage : std::wstring());
@@ -89,6 +90,7 @@ void View::LoadWallpaper(ID2D1DeviceContext* dc) {
         return;
     }
     if (!gfx::WIC()) return;
+    photo = true;   // 文件来的画面按整张显示，不再裁切
     IWICBitmapDecoder* decoder = nullptr;
     if (FAILED(gfx::WIC()->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
                                                      WICDecodeMetadataCacheOnLoad, &decoder))) {
@@ -110,7 +112,8 @@ void View::LoadWallpaper(ID2D1DeviceContext* dc) {
 }
 
 float View::BlurRadius() const {
-    return app::cfg.BlurRadius >= 0 ? (float)app::cfg.BlurRadius : (float)theme.Background.Blur;
+    const float radius = app::cfg.BlurRadius >= 0 ? (float)app::cfg.BlurRadius : (float)theme.Background.Blur;
+    return radius * (blurScale > 0 ? blurScale : 1.0f);
 }
 
 void View::EnsureBlur(ID2D1DeviceContext* dc, float sigma) {
@@ -174,25 +177,35 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
 
     if (wallpaper) {
         D2D1_SIZE_F img = wallpaper->GetSize();
-        float s = (std::max)(w / img.width, h / img.height);
-        float dw = img.width * s, dh = img.height * s;
-        D2D1_RECT_F dest = D2D1::RectF((w - dw) / 2, (h - dh) / 2, (w + dw) / 2, (h + dh) / 2);
         dc->PushAxisAlignedClip(D2D1::RectF(0, 0, w, h), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
         float radius = BlurRadius();
         // 0 和 1 看起来该是一回事：一两像素的模糊在压暗以后根本看不出来，直接当没开。
         if (radius <= 1.0f) radius = 0;
+
+        // 照片按「整张都能看到」摆放，屏幕截图本身和屏幕同比例，直接铺满。
+        const float cover = (std::max)(w / img.width, h / img.height);
+        const float fit = photo ? (std::min)(w / img.width, h / img.height) : cover;
+
         // 模糊半径是屏幕上的像素，效果作用在原图坐标里，先换算回原图尺度。
-        EnsureBlur(dc, radius > 0 ? radius * 0.5f / (s > 0 ? s : 1.0f) : 0.0f);
-        if (blur && radius > 0) {
-            float sx = (dest.right - dest.left) / img.width;
-            float sy = (dest.bottom - dest.top) / img.height;
-            dc->SetTransform(D2D1::Matrix3x2F::Scale(sx, sy) *
-                             D2D1::Matrix3x2F::Translation(dest.left, dest.top));
-            dc->DrawImage(blur, D2D1::Point2F(0, 0), D2D1::RectF(0, 0, img.width, img.height));
-            dc->SetTransform(&saved);
-        } else {
-            dc->DrawBitmap(wallpaper, dest, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        auto blit = [&](float scale, float screenBlur) {
+            const float dw = img.width * scale, dh = img.height * scale;
+            const D2D1_RECT_F dest = D2D1::RectF((w - dw) / 2, (h - dh) / 2, (w + dw) / 2, (h + dh) / 2);
+            EnsureBlur(dc, screenBlur > 0 ? screenBlur * 0.5f / (scale > 0 ? scale : 1.0f) : 0.0f);
+            if (blur && screenBlur > 0) {
+                dc->SetTransform(D2D1::Matrix3x2F::Scale(dw / img.width, dh / img.height) *
+                                 D2D1::Matrix3x2F::Translation(dest.left, dest.top));
+                dc->DrawImage(blur, D2D1::Point2F(0, 0), D2D1::RectF(0, 0, img.width, img.height));
+                dc->SetTransform(&saved);
+            } else {
+                dc->DrawBitmap(wallpaper, dest, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            }
+        };
+
+        if (fit < cover - 0.001f) {
+            // 图比屏幕方：先铺一层放大模糊的同一张图填满两边，再把整张图摆上去。
+            blit(cover, radius > 0 ? radius : 18.0f);
         }
+        blit(fit, radius);
         dc->PopAxisAlignedClip();
     }
 
@@ -226,9 +239,6 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
     }
 
     if (card) {
-        D2D1_ROUNDED_RECT box = D2D1::RoundedRect(D2D1::RectF(left, top, left + colW, top + cardH),
-                                                  gfx::Radius((float)theme.Card.Radius, 0),
-                                                  gfx::Radius((float)theme.Card.Radius, 0));
         const float cardR = gfx::Radius((float)theme.Card.Radius, 0);
         if (cardR > 0.5f) {
             gfx::FillSmooth(dc, D2D1::RectF(left, top, left + colW, top + cardH), cardR,

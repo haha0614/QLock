@@ -407,6 +407,9 @@ public:
             preview.DropDeviceResources();
             previewLoaded = false;
         }
+        // 画布比真屏窄（960 对 1920）时模糊半径要跟着缩，不然预览会比锁屏糊一倍。
+        const int screenW = GetSystemMetrics(SM_CXSCREEN);
+        preview.blurScale = screenW > 0 ? 960.0f / (float)screenW : 1.0f;
         if (!previewLoaded) {
             preview.theme = themes::Find(app::cfg.ThemeId);
             preview.Reload(dc);

@@ -40,9 +40,13 @@ public:
     void SetSnapshot(HBITMAP bmp);
     // 设置页的预览用：没挑背景图时拿当前桌面壁纸顶替，真锁屏才有截图可抓。
     std::wstring imageOverride;
+    // 预览画布的宽度和真实屏幕不一样时，模糊半径按比例缩一下，预览才不会比锁屏糊一倍。
+    float blurScale = 1.0f;
 
 private:
     HBITMAP snapshot = nullptr;
+    // 背景来自图片文件（要整张显示）还是抓屏（本身就铺满），两者摆放方式不同。
+    bool photo = false;
     ID2D1Bitmap1* wallpaper = nullptr;
     ID2D1Effect* blur = nullptr;
     IDWriteTextFormat* clockFmt = nullptr;
