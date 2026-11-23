@@ -51,6 +51,8 @@ struct FieldStyle {
     float caretLift = 2.0f;   // 空框时笔尖比文字起点再靠左的距离
     float dotStep = 0.67f;    // 圆点步进，相对字号
     float dotRadius = 0.23f;  // 圆点半径，相对字号
+    float rightInset = 0.0f;  // 右侧留给框内按钮（比如密码的眼睛图标）的宽度
+    bool globalRadius = true; // 设置窗的控件用固定圆角，不跟锁屏那几个字一起变
     bool underline = false;
     bool dots = false;        // 密码框：不显示字符，画圆点
     bool caret = true;

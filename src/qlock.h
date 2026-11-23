@@ -27,6 +27,7 @@
 struct Config {
     int         Version = 1;
     std::wstring Autostart = L"runkey";
+    std::wstring BackgroundColor;     // 纯色背景；空表示用主题自带的底色
     std::wstring BackgroundImage;
     bool        BackgroundSnapshot = false;
     int         BlurRadius = -1;

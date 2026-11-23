@@ -163,7 +163,10 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
     float left = (w - colW) / 2;
     float top = (h - total) / 2;
 
-    D2D1_COLOR_F bgColor = themes::Color(theme.Background.Color, gfx::Color(0xFF080A10));
+    // 纯色背景：设置里填了颜色就用它，没填沿用主题自带底色。
+    D2D1_COLOR_F bgColor = app::cfg.BackgroundColor.empty()
+                               ? themes::Color(theme.Background.Color, gfx::Color(0xFF080A10))
+                               : themes::Color(app::cfg.BackgroundColor, gfx::Color(0xFF080A10));
     gfx::FillRect(dc, D2D1::RectF(0, 0, w, h), bgColor);
 
     if (wallpaper) {
@@ -227,7 +230,12 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
     }
 
     if (theme.Brand.Show) {
-        gfx::Text(dc, brandFmt, theme.Brand.Text, D2D1::RectF(left, top, left + innerW, top + brandH),
+        // 卡片里没有提示文字时，字标在「卡片上边缘 → 输入框」这段里垂直居中，
+        // 否则它会贴着卡片顶、离输入框太近。
+        const bool spread = card && !showSub;
+        float brandTop = spread ? top - (float)theme.Card.PadV : top;
+        float brandBox = spread ? brandH + (float)theme.Card.PadV : brandH;
+        gfx::Text(dc, brandFmt, theme.Brand.Text, D2D1::RectF(left, brandTop, left + innerW, brandTop + brandBox),
                   themes::Color(theme.Brand.Color, gfx::Color(0xFF78A0E6)));
         top += brandH;
     }

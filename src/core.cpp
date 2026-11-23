@@ -102,6 +102,7 @@ bool LoadConfig() {
     }
     cfg.Version = json::GetInt(kv[L"Version"], 1);
     if (kv.count(L"Autostart")) cfg.Autostart = json::Unescape(kv[L"Autostart"]);
+    if (kv.count(L"BackgroundColor")) cfg.BackgroundColor = json::Unescape(kv[L"BackgroundColor"]);
     if (kv.count(L"BackgroundImage")) cfg.BackgroundImage = json::Unescape(kv[L"BackgroundImage"]);
     cfg.BackgroundSnapshot = json::GetBool(kv[L"BackgroundSnapshot"], cfg.BackgroundSnapshot);
     if (kv.count(L"BlurRadius")) cfg.BlurRadius = json::GetInt(kv[L"BlurRadius"], cfg.BlurRadius);
@@ -136,6 +137,7 @@ bool LoadConfig() {
 bool SaveConfig() {
     std::wstringstream out;
     out << L"{\"Autostart\":" << json::Quote(cfg.Autostart)
+        << L",\"BackgroundColor\":" << json::Quote(cfg.BackgroundColor)
         << L",\"BackgroundImage\":" << json::Quote(cfg.BackgroundImage)
         << L",\"BackgroundSnapshot\":" << (cfg.BackgroundSnapshot ? L"true" : L"false")
         << L",\"BlurRadius\":" << cfg.BlurRadius

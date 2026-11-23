@@ -93,6 +93,10 @@ enum {
     ID_THEMES_FOLDER = 260,
     ID_BG_PICK = 300,
     ID_BG_CLEAR = 301,
+    ID_BG_SOLID = 303,
+    ID_BG_SNAP = 304,
+    ID_BG_IMAGE = 305,
+    ID_BG_COLOR = 306,
     ID_SHOW_CLOCK = 310,
     ID_SNAPSHOT = 311,
     ID_SHOW_SUBTITLE = 312,
@@ -187,7 +191,7 @@ public:
     void DestroyAll();
 
     D2D1_ROUNDED_RECT Round(const Rect& r, float radius) {
-        float rad = gfx::Radius(radius, r.H());
+        float rad = radius < r.H() * 0.5f ? radius : r.H() * 0.5f;  // 设置窗圆角固定，不吃锁屏的全局覆盖
         return D2D1::RoundedRect(D2D1::RectF(r.l, r.t, r.r, r.b), rad, rad);
     }
 
@@ -403,20 +407,25 @@ public:
             preview.Reload(dc);
             previewLoaded = true;
         }
-        float s = (std::min)(box.W() / 960.0f, box.H() / 408.0f);
-        float pw = 960 * s, ph = 408 * s;
-        float ox = box.l + (box.W() - pw) / 2;
+        // 画布按 16:9 合成，和真实屏幕同比例，背景的裁切范围才跟锁屏一致；上下对称裁掉一点。
+        float s = box.W() / 960.0f;
+        float ph = 540 * s;
+        float ox = box.l;
         float oy = box.t + (box.H() - ph) / 2;
+        // 预览框的圆角跟着圆角滑块走（按预览缩放比例换算），滑块一动这里就变。
+        float frameR = app::cfg.CornerRadius >= 0 ? (float)app::cfg.CornerRadius * s : design::RadiusCard;
+        if (frameR < 0) frameR = 0;
+        if (frameR > box.H() * 0.5f) frameR = box.H() * 0.5f;
 
         ID2D1RoundedRectangleGeometry* geom = nullptr;
-        D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(box.l, box.t, box.r, box.b), design::RadiusCard, design::RadiusCard);
+        D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(box.l, box.t, box.r, box.b), frameR, frameR);
         gfx::D2D()->CreateRoundedRectangleGeometry(rr, &geom);
         if (geom) {
             D2D1_LAYER_PARAMETERS lp = D2D1::LayerParameters(D2D1::InfiniteRect(), geom);
             dc->PushLayer(lp, nullptr);
         }
         dc->SetTransform(D2D1::Matrix3x2F::Scale(s, s) * D2D1::Matrix3x2F::Translation(ox, oy));
-        preview.Draw(dc, 960, 408);
+        preview.Draw(dc, 960, 540);
         dc->SetTransform(D2D1::Matrix3x2F::Identity());
         if (geom) { dc->PopLayer(); geom->Release(); }
     }
@@ -436,7 +445,25 @@ public:
     void PaintNav(float h);
 
     void DrawField(const Rect& r, const std::wstring& text, int id, bool password, bool enabled,
-                   const std::wstring& hint);
+                   const std::wstring& hint, float rightInset = 0.0f);
+    void Eye(const Rect& r, bool hidden, bool hovered);
+    void PickBackgroundImage();
+
+    // 0 = 纯色，1 = 屏幕截图，2 = 自定义图片。
+    static int BgMode() {
+        if (!app::cfg.BackgroundImage.empty()) return 2;
+        return app::cfg.BackgroundSnapshot ? 1 : 0;
+    }
+    static D2D1_COLOR_F BgColor(const LockTheme& t) {
+        D2D1_COLOR_F base = themes::Color(t.Background.Color, gfx::Color(0xFF080A10));
+        return app::cfg.BackgroundColor.empty() ? base : themes::Color(app::cfg.BackgroundColor, base);
+    }
+    static std::wstring HexOf(D2D1_COLOR_F c) {
+        wchar_t buf[16] = {};
+        _snwprintf_s(buf, _countof(buf), _TRUNCATE, L"#%02X%02X%02X", (int)(c.r * 255.0f + 0.5f),
+                     (int)(c.g * 255.0f + 0.5f), (int)(c.b * 255.0f + 0.5f));
+        return buf;
+    }
     void DrawFontDialog(float w, float h);
     IDWriteTextFormat* RowFormat(const std::wstring& family);
     void RebuildFontRows();
@@ -476,7 +503,8 @@ void Settings::PaintFooter(float w, float h, float left, float right) {
     gfx::FillRect(dc, D2D1::RectF(0, h - FooterH, w, h), Color(design::SurfaceFooter));
     gfx::FillRect(dc, D2D1::RectF(0, h - FooterH, w, h - FooterH + 1), Color(design::Line));
     if (!status.empty()) {
-        gfx::Text(dc, fSmall, status, D2D1::RectF(left, h - FooterH, right - 110, h), Color(statusError ? design::Error : design::TextMuted));
+        gfx::TextCentered(dc, fSmall, status, D2D1::RectF(left, h - FooterH, right - 110, h),
+                          Color(statusError ? design::Error : design::TextMuted));
     }
     Rect close{ right - 96, h - FooterH + 11, right, h - FooterH + 11 + ControlH };
     Button(close, L"关闭", true, hot == ID_CLOSE);
@@ -652,14 +680,47 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
     y += 38 + ChipH + design::Gap12;
 
     // 背景图片
+    // 背景：纯色 / 屏幕截图 / 自定义图片 三选一，下一行跟着选中的方式换内容。
+    const int bgMode = BgMode();
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"背景图片", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
+    gfx::Text(dc, fBody, L"背景", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
     {
+        static const wchar_t* names[3] = { L"纯色", L"屏幕截图", L"自定义图片" };
+        static const float widths[3] = { 86.0f, 110.0f, 120.0f };
+        float x = right;
+        for (int i = 2; i >= 0; --i) {
+            Rect r{ x - widths[i], y + design::Gap12, x, y + design::Gap12 + ChipH };
+            Pill(r, names[i], bgMode == i, hot == ID_BG_SOLID + i);
+            Widget wg; wg.id = ID_BG_SOLID + i; wg.kind = K_PILL; wg.rect = r; wg.on = (bgMode == i);
+            widgets.push_back(wg);
+            x = r.l - design::Gap8;
+        }
+    }
+    y += RowH;
+
+    RowLine(y, left, right);
+    if (bgMode == 0) {
+        const LockTheme& look0 = themes::Find(app::cfg.ThemeId);
+        D2D1_COLOR_F cur = BgColor(look0);
+        gfx::Text(dc, fBody, L"背景颜色", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
+        Rect pick{ right - 130, y + design::Gap12, right, y + design::Gap12 + ControlH };
+        Rect swatch{ pick.l - design::Gap12 - 20, y + (RowH - 20) / 2, pick.l - design::Gap12, y + (RowH - 20) / 2 + 20 };
+        gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(swatch.l, swatch.t, swatch.r, swatch.b), 5, 5), cur);
+        gfx::StrokeRound(dc, D2D1::RoundedRect(D2D1::RectF(swatch.l, swatch.t, swatch.r, swatch.b), 5, 5),
+                         Color(design::ChipBorder), 1.0f);
+        Button(pick, HexOf(cur), false, hot == ID_BG_COLOR);
+        Widget wg; wg.id = ID_BG_COLOR; wg.kind = K_BTN; wg.rect = pick; widgets.push_back(wg);
+    } else if (bgMode == 1) {
+        gfx::Text(dc, fBody, L"背景截图", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
+        gfx::Text(dc, fSmall, L"锁定那一刻截下整块屏幕，再模糊压暗", D2D1::RectF(left + 200, y, right, y + RowH),
+                  Color(design::TextMuted));
+    } else {
+        gfx::Text(dc, fBody, L"背景图片", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
         Rect clear{ right - 88, y + design::Gap12, right, y + design::Gap12 + ControlH };
         Rect pick{ clear.l - design::Gap8 - 240, y + design::Gap12, clear.l - design::Gap8, y + design::Gap12 + ControlH };
         std::wstring name = app::cfg.BackgroundImage.empty() ? L"选一张本地图片" : LeafName(app::cfg.BackgroundImage);
         Button(pick, name, false, hot == ID_BG_PICK);
-        Button(clear, L"恢复纯色", false, hot == ID_BG_CLEAR);
+        Button(clear, L"清除", false, hot == ID_BG_CLEAR);
         Widget a; a.id = ID_BG_PICK; a.kind = K_BTN; a.rect = pick; widgets.push_back(a);
         Widget b; b.id = ID_BG_CLEAR; b.kind = K_BTN; b.rect = clear; widgets.push_back(b);
     }
@@ -673,8 +734,6 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
         Widget wg; wg.id = id; wg.kind = K_TOGGLE; wg.rect = r; wg.on = value; widgets.push_back(wg);
     };
     toggleRow(y, L"显示时钟和日期", app::cfg.ShowClock, ID_SHOW_CLOCK);
-    y += RowH;
-    toggleRow(y, L"用屏幕截图做模糊背景", app::cfg.BackgroundSnapshot, ID_SNAPSHOT);
     y += RowH;
 
     const LockTheme& look = themes::Find(app::cfg.ThemeId);
@@ -729,7 +788,9 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
         Toggle(toggleR, on);
         Widget t; t.id = ID_FONT_CLOCK_ON; t.kind = K_TOGGLE; t.rect = toggleR; t.on = on; widgets.push_back(t);
         Rect pick{ toggleR.l - design::Gap8 - 190, y + design::Gap12, toggleR.l - design::Gap8, y + design::Gap12 + ControlH };
-        Button(pick, fonts::Label(app::cfg.ClockFont), false, on && hot == ID_FONT_CLOCK, on);
+        // 开关关掉时时钟直接用界面字体，按钮上也就照实显示界面字体。
+        std::wstring shown = on ? fonts::Label(app::cfg.ClockFont) : fonts::Label(app::cfg.FontFamily);
+        Button(pick, shown, false, on && hot == ID_FONT_CLOCK, on);
         if (on) { Widget wg; wg.id = ID_FONT_CLOCK; wg.kind = K_BTN; wg.rect = pick; widgets.push_back(wg); }
     }
     y += RowH;
@@ -747,12 +808,15 @@ void Settings::LayoutUnlock(float left, float right, float top, float bottom) {
     gfx::Text(dc, fBody, L"锁屏密码", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
     {
         Rect apply{ right - 76, y + design::Gap12, right, y + design::Gap12 + ControlH };
-        Rect eye{ apply.l - design::Gap8 - 34, y + design::Gap12, apply.l - design::Gap8, y + design::Gap12 + ControlH };
-        passwordRect = Rect{ eye.l - design::Gap8 - 260, y + design::Gap12, eye.l - design::Gap8, y + design::Gap12 + ControlH };
-        DrawField(passwordRect, passwordText, ID_EDIT_PASSWORD, !reveal, true, L"输入新密码");
-        gfx::FillRound(dc, Round(eye, design::RadiusControl), Color(hot == ID_REVEAL ? design::ChipSurface : design::Hover));
-        gfx::TextCentered(dc, fSmall, reveal ? L"隐藏" : L"显示", D2D1::RectF(eye.l, eye.t, eye.r, eye.b),
-                 Color(design::TextDim));
+        passwordRect = Rect{ apply.l - design::Gap8 - 300, y + design::Gap12, apply.l - design::Gap8,
+                             y + design::Gap12 + ControlH };
+        // 眼睛图标放在框里右侧，和 0.3.0 的密码框一致，不再单独占一格按钮。
+        const float eyeSize = 26.0f;
+        Rect eye{ passwordRect.r - 4 - eyeSize, passwordRect.t + (ControlH - eyeSize) * 0.5f,
+                  passwordRect.r - 4, passwordRect.t + (ControlH + eyeSize) * 0.5f };
+        DrawField(passwordRect, passwordText, ID_EDIT_PASSWORD, !reveal, true, L"输入新密码",
+                  eyeSize + design::Gap8);
+        Eye(eye, !reveal, hot == ID_REVEAL);
         Button(apply, L"设置", true, hot == ID_APPLY_PASSWORD);
         Widget a; a.id = ID_REVEAL; a.kind = K_BTN; a.rect = eye; widgets.push_back(a);
         Widget b; b.id = ID_APPLY_PASSWORD; b.kind = K_BTN; b.rect = apply; widgets.push_back(b);
@@ -799,9 +863,11 @@ void Settings::LayoutStart(float left, float right, float top, float bottom) {
     RowLine(y, left, right);
     gfx::Text(dc, fBody, L"空闲自动锁定", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
     {
-        Rect field{ left + 200, y + design::Gap12, left + 270, y + design::Gap12 + ControlH };
+        Rect field{ right - 76, y + design::Gap12, right, y + design::Gap12 + ControlH };
         DrawField(field, idleText, ID_EDIT_IDLE, false, true, L"0");
-        gfx::Text(dc, fSmall, L"分钟（0 = 不锁）", D2D1::RectF(field.r + design::Gap12, y, right - 40, y + RowH),
+        const std::wstring unit = L"分钟（0 = 不锁）";
+        float unitW = gfx::Measure(fSmall, unit);
+        gfx::Text(dc, fSmall, unit, D2D1::RectF(field.l - design::Gap12 - unitW, y, field.l - design::Gap12, y + RowH),
                   Color(design::TextDim));
     }
     y += RowH;
@@ -1056,7 +1122,7 @@ void Settings::Paint() {
 
 // ---- 输入框：自己画，不用子窗口（flip 交换链上子窗口会被盖住）----
 void Settings::DrawField(const Rect& r, const std::wstring& text, int id, bool password, bool enabled,
-                         const std::wstring& hint) {
+                         const std::wstring& hint, float rightInset) {
     const bool focused = focus == id;
     gfx::FieldStyle st;
     st.radius = design::RadiusControl;
@@ -1066,6 +1132,8 @@ void Settings::DrawField(const Rect& r, const std::wstring& text, int id, bool p
     st.caretLift = design::FieldCaretLift;
     st.dotStep = design::DotStep;
     st.dotRadius = design::DotRadius;
+    st.rightInset = rightInset;
+    st.globalRadius = false;
     st.dots = password;
     st.bg = Color(design::InputBg);
     st.border = Color(focused ? design::Accent : (enabled ? design::InputBorder : design::Line));
@@ -1080,6 +1148,40 @@ void Settings::DrawField(const Rect& r, const std::wstring& text, int id, bool p
     wg.rect = r;
     wg.on = enabled;
     widgets.push_back(wg);
+}
+
+// 眼睛图标：椭圆外框 + 圆瞳；密码藏着的时候加一条斜杠。
+void Settings::Eye(const Rect& r, bool hidden, bool hovered) {
+    if (hovered) gfx::FillRound(dc, Round(r, design::RadiusRow), Color(design::Hover));
+    const float cx = (r.l + r.r) * 0.5f, cy = r.Mid();
+    ID2D1SolidColorBrush* b = nullptr;
+    if (SUCCEEDED(dc->CreateSolidColorBrush(Color(design::TextDim), &b))) {
+        dc->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 9.0f, 5.5f), b, 1.3f);
+        dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 2.2f, 2.2f), b);
+        b->Release();
+    }
+    if (hidden && SUCCEEDED(dc->CreateSolidColorBrush(Color(design::Accent), &b))) {
+        dc->DrawLine(D2D1::Point2F(cx - 7.5f, cy + 6.0f), D2D1::Point2F(cx + 7.5f, cy - 6.0f), b, 1.4f);
+        b->Release();
+    }
+}
+
+void Settings::PickBackgroundImage() {
+    wchar_t path[MAX_PATH] = {};
+    OPENFILENAMEW ofn = { sizeof(ofn) };
+    ofn.hwndOwner = hwnd;
+    ofn.lpstrFilter = L"图片\0*.jpg;*.jpeg;*.png;*.bmp;*.gif\0所有文件\0*.*\0";
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    ofn.lpstrTitle = L"选择锁屏背景图片";
+    if (GetOpenFileNameW(&ofn)) {
+        app::cfg.BackgroundImage = path;
+        app::cfg.BackgroundSnapshot = false;
+        previewLoaded = false;
+        QueueSave();
+        Invalidate();
+    }
 }
 
 void Settings::ApplySlider(int id, float x) {
@@ -1137,32 +1239,61 @@ void Settings::Apply(int id) {
         ShellExecuteW(nullptr, L"open", themes::Dir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return;
     }
-    if (id == ID_BG_PICK) {
-        wchar_t path[MAX_PATH] = {};
-        OPENFILENAMEW ofn = { sizeof(ofn) };
-        ofn.hwndOwner = hwnd;
-        ofn.lpstrFilter = L"图片\0*.jpg;*.jpeg;*.png;*.bmp;*.gif\0所有文件\0*.*\0";
-        ofn.lpstrFile = path;
-        ofn.nMaxFile = MAX_PATH;
-        ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-        ofn.lpstrTitle = L"选择锁屏背景图片";
-        if (GetOpenFileNameW(&ofn)) {
-            app::cfg.BackgroundImage = path;
+    if (id == ID_BG_PICK) { PickBackgroundImage(); return; }
+    if (id == ID_BG_CLEAR) {
+        app::cfg.BackgroundImage.clear();
+        app::cfg.BackgroundSnapshot = false;
+        previewLoaded = false;
+        QueueSave();
+        Invalidate();
+        return;
+    }
+    if (id == ID_BG_SOLID) {
+        app::cfg.BackgroundImage.clear();
+        app::cfg.BackgroundSnapshot = false;
+        previewLoaded = false;
+        QueueSave();
+        Invalidate();
+        return;
+    }
+    if (id == ID_BG_SNAP) {
+        app::cfg.BackgroundImage.clear();
+        app::cfg.BackgroundSnapshot = true;
+        previewLoaded = false;
+        QueueSave();
+        Invalidate();
+        return;
+    }
+    if (id == ID_BG_IMAGE) {
+        app::cfg.BackgroundSnapshot = false;
+        if (app::cfg.BackgroundImage.empty()) PickBackgroundImage();
+        else { previewLoaded = false; QueueSave(); Invalidate(); }
+        return;
+    }
+    if (id == ID_BG_COLOR) {
+        const LockTheme& look = themes::Find(app::cfg.ThemeId);
+        D2D1_COLOR_F cur = BgColor(look);
+        static COLORREF custom[16] = {};
+        CHOOSECOLORW cc = { sizeof(cc) };
+        cc.hwndOwner = hwnd;
+        cc.rgbResult = RGB((BYTE)(cur.r * 255.0f + 0.5f), (BYTE)(cur.g * 255.0f + 0.5f),
+                           (BYTE)(cur.b * 255.0f + 0.5f));
+        cc.lpCustColors = custom;
+        cc.Flags = CC_FULLOPEN | CC_ANYCOLOR | CC_RGBINIT;
+        if (ChooseColorW(&cc)) {
+            wchar_t buf[16] = {};
+            _snwprintf_s(buf, _countof(buf), _TRUNCATE, L"#%02X%02X%02X", GetRValue(cc.rgbResult),
+                         GetGValue(cc.rgbResult), GetBValue(cc.rgbResult));
+            app::cfg.BackgroundColor = buf;
             previewLoaded = false;
             QueueSave();
             Invalidate();
         }
         return;
     }
-    if (id == ID_BG_CLEAR) {
-        app::cfg.BackgroundImage.clear();
-        previewLoaded = false;
-        QueueSave();
-        Invalidate();
-        return;
-    }
     if (id == ID_SHOW_CLOCK) { app::cfg.ShowClock = !app::cfg.ShowClock; QueueSave(); Invalidate(); return; }
     if (id == ID_SNAPSHOT) { app::cfg.BackgroundSnapshot = !app::cfg.BackgroundSnapshot; QueueSave(); Invalidate(); return; }
+
     if (id == ID_SHOW_SUBTITLE) {
         app::cfg.ShowSubtitle = !app::cfg.ShowSubtitle;
         QueueSave();
@@ -1263,8 +1394,18 @@ std::wstring LeafName(const std::wstring& path) {
 }
 
 void Settings::ClickAt(float x, float y, bool down) {
-    for (const Widget& wg : widgets) {
-        if (!wg.rect.Has(x, y)) continue;
+    // 框内按钮（密码框里的眼睛）压在输入框上面，命中时优先取它。
+    int hit = -1;
+    for (int i = 0; i < (int)widgets.size(); ++i) {
+        if (!widgets[i].rect.Has(x, y)) continue;
+        if (widgets[i].kind != K_EDIT) {
+            hit = i;
+            break;
+        }
+        if (hit < 0) hit = i;
+    }
+    if (hit >= 0) {
+        const Widget& wg = widgets[hit];
         if (down) {
             if (wg.kind == K_SLIDER) {
                 dragSlider = wg.id;

@@ -162,15 +162,18 @@ void Field(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, float fontSize, const
     if (st.underline) {
         FillRect(dc, D2D1::RectF(box.left, box.bottom - 1.0f, box.right, box.bottom), st.border);
     } else {
-        D2D1_ROUNDED_RECT r = D2D1::RoundedRect(box, Radius(st.radius, box.bottom - box.top),
-                                                Radius(st.radius, box.bottom - box.top));
+        const float fh = box.bottom - box.top;
+        const float rad = st.globalRadius ? Radius(st.radius, fh)
+                                          : (st.radius < fh * 0.5f ? st.radius : fh * 0.5f);
+        D2D1_ROUNDED_RECT r = D2D1::RoundedRect(box, rad, rad);
         FillRound(dc, r, st.bg);
         StrokeRound(dc, r, st.border, 1.0f);
     }
 
     const float inset = st.underline ? 0.0f : st.inset;
     const float textLeft = box.left + inset;
-    const float textW = box.right - textLeft - inset;
+    float textW = box.right - textLeft - inset - st.rightInset;
+    if (textW < 12.0f) textW = 12.0f;
     if (text.empty() && hint) {
         Text(dc, fmt, hint, D2D1::RectF(textLeft, box.top, textLeft + textW, box.bottom), st.hint);
     }
@@ -187,6 +190,8 @@ void Field(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, float fontSize, const
             const float cx = textLeft + r + step * (float)i;
             dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), brush);
         }
+    } else if (!text.empty()) {
+        Text(dc, fmt, text, D2D1::RectF(textLeft, box.top, textLeft + textW, box.bottom), fg);
     }
     if (st.caret && caretOn && enabled) {
         float cx = textLeft - st.caretLift;

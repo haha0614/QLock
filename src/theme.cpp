@@ -586,8 +586,8 @@ LockTheme BuiltinMinimal() {
     t.Link.Size = 11;
     t.Link.Color = L"#FF5C636E";
     t.Link.Gap = 10;
-    t.Background.Color = L"#FF000000";
-    t.Background.Dim = 210;
+    t.Background.Color = L"#FF080A10";
+    t.Background.Dim = 150;
     return t;
 }
 
