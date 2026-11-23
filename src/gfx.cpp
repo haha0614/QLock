@@ -222,6 +222,19 @@ float Measure(IDWriteTextFormat* fmt, const std::wstring& s) {
     return m.widthIncludingTrailingWhitespace;
 }
 
+float MeasureWrapped(IDWriteTextFormat* fmt, const std::wstring& s, float width) {
+    if (!fmt || s.empty() || width <= 0) return 0;
+    fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+    IDWriteTextLayout* layout = nullptr;
+    HRESULT hr = g_dw->CreateTextLayout(s.c_str(), (UINT32)s.size(), fmt, width, 10000.0f, &layout);
+    fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    if (FAILED(hr) || !layout) return 0;
+    DWRITE_TEXT_METRICS m = {};
+    layout->GetMetrics(&m);
+    layout->Release();
+    return m.height;
+}
+
 float LineHeight(IDWriteTextFormat* fmt) {
     if (!fmt) return 0;
     IDWriteTextLayout* layout = nullptr;

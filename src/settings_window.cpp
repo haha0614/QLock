@@ -8,6 +8,7 @@
 #include "font_list.h"
 #include "autostart.h"
 #include "updater.h"
+#include "update_window.h"
 #include <commdlg.h>
 #include <shellapi.h>
 #include <dwmapi.h>
@@ -45,6 +46,7 @@ float DpiScaleForMonitor(HMONITOR mon) {
 struct CheckResult {
     std::wstring status;
     std::wstring tag;
+    std::wstring notes;
     bool ok = false;
     bool newer = false;
 };
@@ -120,8 +122,6 @@ enum {
     ID_ELEVATED = 364,
     ID_BLOCK_HOTKEYS = 365,
     ID_CHECK_UPDATE = 366,
-    ID_SKIP_UPDATE = 367,
-    ID_CHANGELOG = 368,
     ID_FONT_UI = 340,
     ID_FONT_CLOCK = 341,
     ID_FONT_CLOCK_ON = 342,
@@ -173,11 +173,9 @@ public:
     std::wstring passwordText;
     std::wstring idleText;
 
-    // 关于页的更新流程：检查 → 发现新版 → 下载 → 校验 → 原地替换 → 重启。
-    enum UpdateState { U_IDLE, U_CHECKING, U_NEWER, U_DOWNLOADING, U_INSTALLING, U_READY };
+    // 关于页只负责「检查」；发现新版后开更新窗口，下载和安装在那边跑。
+    enum UpdateState { U_IDLE, U_CHECKING };
     UpdateState updateState = U_IDLE;
-    std::wstring newTag;
-    int updatePercent = 0;
     int focus = 0;
     bool reveal = false;
     bool caretOn = true;
@@ -446,8 +444,7 @@ public:
     void LayoutAbout(float left, float right, float top, float bottom);
     void CommitIdle();
     void CheckUpdate();
-    void StartDownload();
-    void ApplyAutoUpdate(const std::wstring& tag);
+    void ShowUpdateDialog(const std::wstring& tag, const std::wstring& notes);
     void PaintFooter(float w, float h, float left, float right);
     void PaintNav(float h);
 
@@ -929,27 +926,16 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
     RowLine(y, left, right);
     gfx::Text(dc, fBody, L"版本", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
     {
-        bool busy = updateState == U_CHECKING || updateState == U_DOWNLOADING || updateState == U_INSTALLING ||
-                    updateState == U_READY;
-        bool skip = updateState == U_NEWER;
-        // 右边贴着内容区右缘排：下载并升级在最后，跳过这个版本在它左边。
+        const bool busy = updateState == U_CHECKING;
+        // 版本号紧贴「检查更新」左边，整组靠右缘；单独占一列会悬在中间。
         const float checkW = 100.0f;
-        const float skipW = 104.0f;
-        const float checkLeft = right - checkW;
-        const float skipLeft = checkLeft - skipW - design::Gap8;
-        float valueLeft = skip ? left + 100 : left + 200;
-        float valueRight = (skip ? skipLeft : checkLeft) - design::Gap8;
-        gfx::Text(dc, fBody, updater::CurrentVersion(),
-                  D2D1::RectF(valueLeft, y, valueRight, y + RowH), Color(design::TextDim));
-
-        const wchar_t* label = L"检查更新";
-        if (updateState == U_CHECKING) label = L"检查中…";
-        else if (updateState == U_NEWER) label = L"下载并升级";
-        else if (updateState == U_DOWNLOADING) label = L"下载中…";
-        else if (updateState == U_INSTALLING || updateState == U_READY) label = L"正在安装…";
-
-        Rect check{ checkLeft, y + design::Gap12, checkLeft + checkW, y + design::Gap12 + ControlH };
-        Button(check, label, updateState == U_NEWER, hot == ID_CHECK_UPDATE, !busy);
+        Rect check{ right - checkW, y + design::Gap12, right, y + design::Gap12 + ControlH };
+        const std::wstring version = updater::CurrentVersion();
+        const float valueRight = check.l - design::Gap16;
+        gfx::Text(dc, fBody, version,
+                  D2D1::RectF(valueRight - gfx::Measure(fBody, version) - 4, y, valueRight, y + RowH),
+                  Color(design::TextDim));
+        Button(check, busy ? L"检查中…" : L"检查更新", false, hot == ID_CHECK_UPDATE, !busy);
         if (!busy) {
             Widget wg;
             wg.id = ID_CHECK_UPDATE;
@@ -957,34 +943,10 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
             wg.rect = check;
             widgets.push_back(wg);
         }
-        if (skip) {
-            Rect skipRect{ skipLeft, y + design::Gap12, skipLeft + skipW, y + design::Gap12 + ControlH };
-            Button(skipRect, L"跳过这个版本", false, hot == ID_SKIP_UPDATE, true);
-            Widget wg;
-            wg.id = ID_SKIP_UPDATE;
-            wg.kind = K_BTN;
-            wg.rect = skipRect;
-            widgets.push_back(wg);
-        }
     }
     y += RowH - design::Gap8;
     gfx::Text(dc, fSmall, L"C++ 重写，Direct2D 直绘", D2D1::RectF(left, y, right, y + 22), Color(design::TextMuted));
     y += 26;
-
-    RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"更新日志", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
-    gfx::Text(dc, fSmall, L"每个版本改了什么", D2D1::RectF(left + 200, y, right - 120 - design::Gap8, y + RowH),
-              Color(design::TextMuted));
-    {
-        Rect logBtn{ right - 120, y + design::Gap12, right, y + design::Gap12 + ControlH };
-        Button(logBtn, L"查看更新日志", false, hot == ID_CHANGELOG, true);
-        Widget wg;
-        wg.id = ID_CHANGELOG;
-        wg.kind = K_BTN;
-        wg.rect = logBtn;
-        widgets.push_back(wg);
-    }
-    y += RowH - design::Gap8;
 
     RowLine(y, left, right);
     gfx::Text(dc, fBody, L"文件位置", D2D1::RectF(left, y, left + 200, y + 30), Color(design::Text));
@@ -1019,88 +981,33 @@ void Settings::CommitIdle() {
     MarkDirty();
 }
 
-// 启动时自动查到了新版：直接开在关于页，按钮已经可以点了。
-void Settings::ApplyAutoUpdate(const std::wstring& tag) {
-    pane = 4;
-    scroll = 0;
-    scrollMax = 0;
-    updateState = U_NEWER;
-    newTag = tag;
-    SetStatus(L"发现新版本 " + tag + L"，点「下载并升级」", false);
+// 关于页只管查；发现新版就开更新窗口，说明和下载都在那边。
+void Settings::ShowUpdateDialog(const std::wstring& tag, const std::wstring& notes) {
+    updateState = U_IDLE;
+    SetStatus(L"发现新版本 " + tag + L"，更新说明已打开", false);
     Invalidate();
+    UpdateShow(hwnd, tag, notes);
 }
 
-// 检查更新走后台线程，主线程只收结果；发现新版就换成「下载并升级」。
 void Settings::CheckUpdate() {
-    if (updateState == U_CHECKING || updateState == U_DOWNLOADING) return;
+    if (updateState == U_CHECKING) return;
     updateState = U_CHECKING;
     SetStatus(L"正在检查更新…", false);
     HWND target = hwnd;
     std::thread([target]() {
-        std::wstring tag, page, error;
+        std::wstring tag, page, notes, error;
         CheckResult* result = new CheckResult();
-        if (!updater::Check(&tag, &page, &error)) {
+        if (!updater::Check(&tag, &page, &error, &notes)) {
             result->status = L"检查更新失败：" + error;
         } else {
             result->ok = true;
             result->tag = tag;
+            result->notes = notes;
             result->newer = updater::IsNewer(tag, updater::CurrentVersion());
-            if (result->newer) {
-                result->status = tag == app::cfg.SkippedVersion ? L"新版本 " + tag + L" 你之前跳过过，可以在这里直接装"
-                                                                : L"发现新版本 " + tag + L"，点「下载并升级」";
-            } else {
-                result->status = L"已经是最新版本 " + updater::CurrentVersion();
-            }
+            result->status = result->newer ? L"发现新版本 " + tag + L"，更新说明已打开"
+                                           : L"已经是最新版本 " + updater::CurrentVersion();
         }
         if (!PostMessageW(target, WM_APP + 5, (WPARAM)result, 0)) delete result;
-    }).detach();
-}
-
-// 下载 → 校验 SHA256 → 原地替换，都在后台线程；进度用 WM_APP + 6 回报百分比。
-void Settings::StartDownload() {
-    if (updateState != U_NEWER) return;
-    updateState = U_DOWNLOADING;
-    updatePercent = 0;
-    SetStatus(L"正在下载… 0%", false);
-    Invalidate();
-    HWND target = hwnd;
-    std::thread([target]() {
-        std::wstring error;
-        std::wstring target_file = updater::DownloadPath();
-        std::wstring text;
-        const std::wstring exeUrl = updater::ExeUrl();
-        const std::wstring sumsUrl = updater::SumsUrl();
-        app::Log(L"update: downloading %s", exeUrl.c_str());
-        int lastPercent = -1;
-        auto progress = [target, &lastPercent](long long got, long long total) {
-            if (total <= 0) return;
-            int percent = (int)(got * 100 / total);
-            if (percent == lastPercent) return;
-            lastPercent = percent;
-            PostMessageW(target, WM_APP + 6, (WPARAM)percent, 0);
-        };
-        bool installed = false;
-        if (!updater::Download(exeUrl, target_file, progress, &error)) {
-            text = L"下载失败：" + error;
-        } else {
-            PostMessageW(target, WM_APP + 6, (WPARAM)100, 0);
-            std::wstring sumsError;
-            std::wstring sums = updater::FetchText(sumsUrl, &sumsError);
-            std::wstring expected = updater::ExpectedHash(sums);
-            std::wstring actual = updater::Sha256File(target_file);
-            if (expected.empty()) {
-                text = L"下载完成，但没拿到校验值，已放弃这次升级";
-            } else if (actual != expected) {
-                text = L"下载的文件和发布页的校验值不一致，已放弃这次升级";
-            } else if (!updater::Install(target_file, &error)) {
-                text = L"升级失败：" + error;
-            } else {
-                installed = true;
-                text = L"已经装好，正在重启 QLock…";
-            }
-        }
-        std::wstring* message = new std::wstring(text);
-        if (!PostMessageW(target, WM_APP + 7, (WPARAM)message, installed ? 1 : 0)) delete message;
     }).detach();
 }
 
@@ -1403,23 +1310,7 @@ void Settings::Apply(int id) {
         return;
     }
     if (id == ID_CHECK_UPDATE) {
-        if (updateState == U_NEWER) StartDownload();
-        else CheckUpdate();
-        return;
-    }
-    if (id == ID_CHANGELOG) {
-        ShellExecuteW(nullptr, L"open", L"https://github.com/haha0614/QLock/blob/main/CHANGELOG.md", nullptr, nullptr,
-                      SW_SHOWNORMAL);
-        return;
-    }
-    if (id == ID_SKIP_UPDATE) {
-        if (!newTag.empty()) {
-            app::cfg.SkippedVersion = newTag;
-            app::SaveConfig();
-            SetStatus(L"已跳过 " + newTag + L"，下次发新版本还会提醒", false);
-        }
-        updateState = U_IDLE;
-        Invalidate();
+        CheckUpdate();
         return;
     }
     if (id == ID_APPLY_ALL) {
@@ -1619,54 +1510,19 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     if (!self) return DefWindowProcW(hwnd, msg, wp, lp);
 
-    // 后台线程的检查更新结果：wp=状态文字，lp=下载页（可能为空）。
+    // 后台线程的检查结果：wp=CheckResult。
     if (msg == WM_APP + 5) {
         CheckResult* result = (CheckResult*)wp;
         if (result) {
             self->SetStatus(result->status, !result->ok);
-            self->updateState = result->newer ? U_NEWER : U_IDLE;
-            if (result->newer) self->newTag = result->tag;
+            self->updateState = U_IDLE;
             if (result->ok) {
                 // 查成功就记下时间，接下来 24 小时启动时不再自动查。
                 app::cfg.LastUpdateCheckTicks = app::UtcTicksNow();
                 app::SaveConfig();
             }
+            if (result->newer) self->ShowUpdateDialog(result->tag, result->notes);
             delete result;
-        }
-        self->Invalidate();
-        return 0;
-    }
-
-    // 后台线程报下载进度：wp 是百分比。
-    if (msg == WM_APP + 6) {
-        self->updatePercent = (int)wp;
-        if (self->updateState == U_DOWNLOADING) {
-            self->SetStatus(L"正在下载… " + std::to_wstring(self->updatePercent) + L"%", false);
-        }
-        return 0;
-    }
-
-    // 后台线程收尾：wp 是提示文字，lp 非零表示已经替换成功。
-    if (msg == WM_APP + 7) {
-        std::wstring* text = (std::wstring*)wp;
-        bool installed = lp != 0;
-        if (text) {
-            self->SetStatus(*text, !installed);
-            delete text;
-        }
-        if (installed) {
-            self->updateState = U_READY;
-            wchar_t self_path[MAX_PATH] = {};
-            GetModuleFileNameW(nullptr, self_path, MAX_PATH);
-            std::wstring error;
-            if (!updater::Restart(self_path, &error)) {
-                self->SetStatus(L"已经装好，但" + error, true);
-            } else {
-                HWND main = FindWindowExW(HWND_MESSAGE, nullptr, L"QLockMain", nullptr);
-                if (main) PostMessageW(main, WM_CLOSE, 0, 0);
-            }
-        } else {
-            self->updateState = U_IDLE;
         }
         self->Invalidate();
         return 0;
@@ -1857,25 +1713,6 @@ void SettingsShow(HWND owner) {
     }
     g_settings = s;
     s->Invalidate();
-}
-
-void SettingsShowUpdate(HWND owner, const std::wstring& tag) {
-    if (g_settings && g_settings->hwnd && IsWindow(g_settings->hwnd)) {
-        ShowWindow(g_settings->hwnd, SW_SHOW);
-        SetForegroundWindow(g_settings->hwnd);
-        g_settings->ApplyAutoUpdate(tag);
-        return;
-    }
-    Settings* s = new Settings();
-    if (!s->Create(owner)) {
-        delete s;
-        app::Log(L"settings: window create failed");
-        return;
-    }
-    g_settings = s;
-    s->ApplyAutoUpdate(tag);
-    s->Invalidate();
-    SetForegroundWindow(s->hwnd);
 }
 
 bool SettingsOwnsWindow(HWND hwnd) {

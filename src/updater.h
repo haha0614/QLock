@@ -7,7 +7,8 @@ namespace updater {
 std::wstring CurrentVersion();                       // 取 exe 的版本资源，形如 "0.1.0"
 bool IsNewer(const std::wstring& tag,
              const std::wstring& current);           // "v0.1.1" 比 "0.1.0" 新
-bool Check(std::wstring* tag, std::wstring* page, std::wstring* error);
+// notes 是发布说明正文，GitHub 的 markdown 原文，交给界面自己排。
+bool Check(std::wstring* tag, std::wstring* page, std::wstring* error, std::wstring* notes = nullptr);
 
 std::wstring ExeUrl();                               // 新版 exe 的下载地址
 std::wstring SumsUrl();                              // 同一发布页的 SHA256SUMS.txt

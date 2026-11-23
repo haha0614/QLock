@@ -2,6 +2,7 @@
 #include "qlock.h"
 #include "resource.h"
 #include "settings_window.h"
+#include "update_window.h"
 #include "updater.h"
 #include <shellapi.h>
 #include <objbase.h>
@@ -22,6 +23,7 @@ const UINT kShowSettings = RegisterWindowMessageW(L"QLock.ShowSettings");
 // 启动时静默查一次更新的结果。
 struct AutoUpdate {
     std::wstring tag;
+    std::wstring notes;
     bool ok = false;
     bool newer = false;
 };
@@ -172,13 +174,14 @@ void AutoCheckUpdate() {
     if (app::cfg.LastUpdateCheckTicks > 0 && app::UtcTicksNow() - app::cfg.LastUpdateCheckTicks < day) return;
     HWND target = g_main;
     std::thread([target]() {
-        std::wstring tag, page, error;
+        std::wstring tag, page, notes, error;
         AutoUpdate* info = new AutoUpdate();
-        if (!updater::Check(&tag, &page, &error)) {
+        if (!updater::Check(&tag, &page, &error, &notes)) {
             app::Log(L"update: auto check failed: %s", error.c_str());
         } else {
             info->ok = true;
             info->tag = tag;
+            info->notes = notes;
             info->newer = updater::IsNewer(tag, updater::CurrentVersion());
             app::Log(L"update: latest=%s current=%s newer=%d", tag.c_str(), updater::CurrentVersion().c_str(),
                      info->newer ? 1 : 0);
@@ -238,7 +241,7 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 app::cfg.LastUpdateCheckTicks = app::UtcTicksNow();
                 app::SaveConfig();
                 if (info->newer && !info->tag.empty() && info->tag != app::cfg.SkippedVersion) {
-                    SettingsShowUpdate(nullptr, info->tag);
+                    UpdateShow(nullptr, info->tag, info->notes);
                 }
             }
             delete info;

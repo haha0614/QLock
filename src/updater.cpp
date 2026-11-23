@@ -210,7 +210,7 @@ bool IsNewer(const std::wstring& tag, const std::wstring& current) {
     return false;
 }
 
-bool Check(std::wstring* tag, std::wstring* page, std::wstring* error) {
+bool Check(std::wstring* tag, std::wstring* page, std::wstring* error, std::wstring* notes) {
     std::string body;
     if (!HttpFetch(ApiUrl(), &body, std::wstring(), nullptr, error)) return false;
     std::map<std::wstring, std::wstring> fields;
@@ -220,6 +220,7 @@ bool Check(std::wstring* tag, std::wstring* page, std::wstring* error) {
     }
     if (tag) *tag = json::Unescape(fields[L"tag_name"]);
     if (page) *page = json::Unescape(fields[L"html_url"]);
+    if (notes) *notes = json::Unescape(fields[L"body"]);
     if (tag && tag->empty()) {
         if (error) *error = L"服务器没有返回版本号";
         return false;

@@ -39,6 +39,8 @@ void Text(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
 void TextWrapped(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
                  const D2D1_RECT_F& box, D2D1_COLOR_F c);
 float Measure(IDWriteTextFormat* fmt, const std::wstring& s);
+// 按给定宽度折行后的总高，滚动区域要靠它算可滚范围。
+float MeasureWrapped(IDWriteTextFormat* fmt, const std::wstring& s, float width);
 // 单行文字的实际行高（DWrite 的排版结果），排垂直间距时用它，别按字号估。
 float LineHeight(IDWriteTextFormat* fmt);
 
