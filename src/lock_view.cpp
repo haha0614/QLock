@@ -305,8 +305,8 @@ void View::DrawField(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const std::
     float textLeft = box.left + inset;
     float textW = box.right - textLeft - inset;
     if (text.empty()) {
-        // 空的时候光标就停在左内边距上，提示文字往右让一点，免得压在竖线上。
-        gfx::Text(dc, editFmt, hint, D2D1::RectF(textLeft + 12.0f, box.top, textLeft + textW, box.bottom),
+        // 光标停在左内边距上，提示紧挨着它开始，两者的距离和输入第一个圆点后的位置一致。
+        gfx::Text(dc, editFmt, hint, D2D1::RectF(textLeft + 5.0f, box.top, textLeft + textW, box.bottom),
                   themes::Color(theme.Input.Hint, gfx::Color(0xFF7B8391)));
     }
 
