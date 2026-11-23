@@ -156,8 +156,12 @@ Windows 不允许给已经跑起来的进程提权。不在管理员组的账号
 - `pack.cmd` 输出 `dist\QLock.exe` 和 `dist\SHA256SUMS.txt`
 
 源码这样分：`main.cpp` 是外壳、单实例、托盘、键盘钩子和命令行，`lock_window.cpp` 是每块屏一个的覆盖层，
-`theme.cpp` 是主题的读入、内置三套、序列化和颜色解析，`core.cpp` 是配置读写、日志、JSON、base64 和 PBKDF2，
+`lock_view.cpp` 画锁屏内容（设置页的预览也用同一份），`settings_window.cpp` 是设置窗，`theme.cpp` 是主题的读入、
+内置三套、序列化和颜色解析，`core.cpp` 是配置读写、日志、JSON、base64 和 PBKDF2，`gfx.cpp` 是共用的 D2D 绘制，
 `qlock.h`、`theme.h` 是接口，`qlock.rc` 管图标和版本号。
+
+尺寸和颜色只有一份来源：`design.h`。间距取 4 的倍数，容器边缘（192 / 220 / 752）都在栅格上；输入框只有一套画法
+（`gfx.cpp` 的 `gfx::Field`），设置窗和锁屏只是把各自的主题色和半径填进去。
 
 界面不用 UI 框架：Direct2D + DirectWrite 直接画到每块屏的 DXGI flip 交换链上，模糊是 D2D 的 GaussianBlur 效果。
 

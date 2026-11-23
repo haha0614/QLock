@@ -148,4 +148,44 @@ IDWriteTextFormat* Format(const std::wstring& family, float size, int weight, DW
     return fmt;
 }
 
+void Field(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, float fontSize, const D2D1_RECT_F& box,
+           const std::wstring& text, const wchar_t* hint, const FieldStyle& st, bool enabled, bool caretOn) {
+    if (st.underline) {
+        FillRect(dc, D2D1::RectF(box.left, box.bottom - 1.0f, box.right, box.bottom), st.border);
+    } else {
+        D2D1_ROUNDED_RECT r = D2D1::RoundedRect(box, Radius(st.radius, box.bottom - box.top),
+                                                Radius(st.radius, box.bottom - box.top));
+        FillRound(dc, r, st.bg);
+        StrokeRound(dc, r, st.border, 1.0f);
+    }
+
+    const float inset = st.underline ? 0.0f : st.inset;
+    const float textLeft = box.left + inset;
+    const float textW = box.right - textLeft - inset;
+    if (text.empty() && hint) {
+        Text(dc, fmt, hint, D2D1::RectF(textLeft, box.top, textLeft + textW, box.bottom), st.hint);
+    }
+
+    D2D1_COLOR_F fg = st.fg;
+    if (!enabled) fg.a *= 0.45f;
+    ID2D1SolidColorBrush* brush = nullptr;
+    if (FAILED(dc->CreateSolidColorBrush(fg, &brush))) return;
+    const float cy = (box.top + box.bottom) * 0.5f;
+    if (st.dots) {
+        const float step = fontSize * st.dotStep;
+        const float r = fontSize * st.dotRadius;
+        for (size_t i = 0; i < text.size(); ++i) {
+            const float cx = textLeft + r + step * (float)i;
+            dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), brush);
+        }
+    }
+    if (st.caret && caretOn && enabled) {
+        float cx = textLeft - st.caretLift;
+        if (!text.empty()) cx = st.dots ? textLeft + fontSize * st.dotStep * (float)text.size()
+                                       : textLeft + Measure(fmt, text);
+        dc->FillRectangle(D2D1::RectF(cx, cy - st.caretH * 0.5f, cx + st.caretW, cy + st.caretH * 0.5f), brush);
+    }
+    brush->Release();
+}
+
 }  // namespace gfx

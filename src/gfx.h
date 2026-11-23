@@ -37,4 +37,26 @@ float Measure(IDWriteTextFormat* fmt, const std::wstring& s);
 // 字体名留空或系统里没有时退回微软雅黑 UI。
 IDWriteTextFormat* Format(const std::wstring& family, float size, int weight, DWRITE_TEXT_ALIGNMENT align);
 
+// 输入框的画法：底、边、提示、密码圆点、光标都按同一套几何算。
+// 设置窗和锁屏都用它，改一处两边同时变。
+struct FieldStyle {
+    float radius = 8.0f;
+    float inset = 13.0f;      // 文字/圆点距框左；下划线样式时内部按 0 处理
+    float caretW = 1.8f;
+    float caretH = 16.0f;
+    float caretLift = 2.0f;   // 空框时笔尖比文字起点再靠左的距离
+    float dotStep = 0.67f;    // 圆点步进，相对字号
+    float dotRadius = 0.23f;  // 圆点半径，相对字号
+    bool underline = false;
+    bool dots = false;        // 密码框：不显示字符，画圆点
+    bool caret = true;
+    D2D1_COLOR_F bg = {};
+    D2D1_COLOR_F border = {};
+    D2D1_COLOR_F fg = {};
+    D2D1_COLOR_F hint = {};
+};
+
+void Field(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, float fontSize, const D2D1_RECT_F& box,
+           const std::wstring& text, const wchar_t* hint, const FieldStyle& st, bool enabled, bool caretOn);
+
 }  // namespace gfx

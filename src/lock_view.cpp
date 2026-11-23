@@ -1,6 +1,7 @@
 #pragma once
 #include "lock_view.h"
 #include "gfx.h"
+#include "design.h"
 #include "qlock.h"
 #include <d2d1effects.h>
 #include <algorithm>
@@ -290,44 +291,22 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
 
 void View::DrawField(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const std::wstring& text, const wchar_t* hint,
                      bool enabled) {
-    const bool underline = _wcsicmp(theme.Input.Kind.c_str(), L"underline") == 0;
-    if (underline) {
-        gfx::FillRect(dc, D2D1::RectF(box.left, box.bottom - 1.0f, box.right, box.bottom),
-                      themes::Color(theme.Input.Border, gfx::Color(0xFF2A2F38)));
-    } else {
-        float radius = gfx::Radius((float)theme.Input.Radius, box.bottom - box.top);
-        D2D1_ROUNDED_RECT r = D2D1::RoundedRect(box, radius, radius);
-        gfx::FillRound(dc, r, themes::Color(theme.Input.Bg, gfx::Color(0xFF1E2129)));
-        gfx::StrokeRound(dc, r, themes::Color(theme.Input.Border, gfx::Color(0xFF4A4F5A)), 1.0f);
-    }
-
-    float inset = underline ? 0.0f : 13.0f;
-    float textLeft = box.left + inset;
-    float textW = box.right - textLeft - inset;
-    // 提示文字和密码圆点共用同一个文本起点（13px 内边距），光标比它们再靠左 2px，
-    // 位置和量过的 0.3.0 一致：圆点 7px 直径、间隔 10px。
-    const float textOrigin = textLeft;
-    if (text.empty()) {
-        gfx::Text(dc, editFmt, hint, D2D1::RectF(textOrigin, box.top, textLeft + textW, box.bottom),
-                  themes::Color(theme.Input.Hint, gfx::Color(0xFF7B8391)));
-    }
-
-    D2D1_COLOR_F fg = themes::Color(theme.Input.Fg, gfx::Color(0xFFFFFFFF));
-    if (!enabled) fg.a = 0.45f;
-    ID2D1SolidColorBrush* dot = nullptr;
-    if (FAILED(dc->CreateSolidColorBrush(fg, &dot))) return;
-    float cy = (box.top + box.bottom) / 2;
-    float step = (float)theme.Input.Size * 0.67f;
-    float r = (float)theme.Input.Size * 0.23f;
-    for (size_t i = 0; i < text.size(); ++i) {
-        float cx = textOrigin + r + step * (float)i;
-        dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), dot);
-    }
-    if (caretOn && enabled) {
-        float cx = text.empty() ? textLeft - 2.0f : textOrigin + step * (float)text.size();
-        dc->FillRectangle(D2D1::RectF(cx, cy - 8.0f, cx + 1.8f, cy + 8.0f), dot);
-    }
-    dot->Release();
+    // 几何全在 design.h，这里只把主题的颜色和半径填进同一个输入框画法。
+    gfx::FieldStyle st;
+    st.underline = _wcsicmp(theme.Input.Kind.c_str(), L"underline") == 0;
+    st.radius = (float)theme.Input.Radius;
+    st.inset = design::FieldInset;
+    st.caretW = design::FieldCaretW;
+    st.caretH = design::FieldCaretH;
+    st.caretLift = design::FieldCaretLift;
+    st.dotStep = design::DotStep;
+    st.dotRadius = design::DotRadius;
+    st.dots = true;
+    st.bg = themes::Color(theme.Input.Bg, gfx::Color(0xFF1E2129));
+    st.border = themes::Color(theme.Input.Border, gfx::Color(st.underline ? 0xFF2A2F38 : 0xFF4A4F5A));
+    st.fg = themes::Color(theme.Input.Fg, gfx::Color(0xFFFFFFFF));
+    st.hint = themes::Color(theme.Input.Hint, gfx::Color(0xFF7B8391));
+    gfx::Field(dc, editFmt, (float)theme.Input.Size, box, text, hint, st, enabled, caretOn);
 }
 
 void View::DrawButton(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const wchar_t* label) {

@@ -3,6 +3,7 @@
 #include "qlock.h"
 #include "theme.h"
 #include "gfx.h"
+#include "design.h"
 #include "lock_view.h"
 #include "font_list.h"
 #include "autostart.h"
@@ -50,35 +51,19 @@ struct CheckResult {
 
 using gfx::Color;
 
-// 尺寸 token，跟 0.3.0 的设置窗一致。
-const float PanePad = 28;
-const float NavWidth = 192;
-const float NavItemH = 34;
-const float ControlH = 34;
-const float ChipH = 30;
-const float RowH = 58;
-const float FooterH = 56;
-const float PreviewH = 226;
-const float WinW = 780;
-const float WinH = 640;
+// 尺寸和颜色都收在 design.h 里，这里只把名字引进来，值不再写在窗口代码里。
+using design::PanePad;
+using design::NavWidth;
+using design::NavItemH;
+using design::NavItemGap;
+using design::ControlH;
+using design::ChipH;
+using design::RowH;
+using design::FooterH;
+using design::PreviewH;
+using design::WinW;
+using design::WinH;
 
-const unsigned kAccent = 0xFF3A76E8;
-const unsigned kAccentHover = 0xFF4E8AFA;
-const unsigned kAccentSoft = 0x2E6096FA;
-const unsigned kSurface = 0xFF181B23;
-const unsigned kSurfaceNav = 0xFF12151C;
-const unsigned kSurfaceFooter = 0xFF14171E;
-const unsigned kLine = 0x1EFFFFFF;
-const unsigned kRowLine = 0x18FFFFFF;
-const unsigned kInputBg = 0x1EFFFFFF;
-const unsigned kInputBorder = 0x50FFFFFF;
-const unsigned kChipSurface = 0x23FFFFFF;
-const unsigned kChipBorder = 0x5AFFFFFF;
-const unsigned kSwitchTrack = 0x32FFFFFF;
-const unsigned kText = 0xFFF2F4F8;
-const unsigned kTextDim = 0xFFB4BAC8;
-const unsigned kTextMuted = 0xFF8A90A0;
-const unsigned kError = 0xFFFF8A8A;
 
 // 子窗口 EDIT 不透明，这里取底色叠 12% 白的实色。
 
@@ -213,11 +198,11 @@ public:
         ReleaseFmt(&fSmall);
         ReleaseFmt(&fControl);
         std::wstring ui = app::UiFontName();
-        fBrand = gfx::Format(ui, 17.0f, 700, DWRITE_TEXT_ALIGNMENT_LEADING);
-        fTitle = gfx::Format(ui, 19.0f, 700, DWRITE_TEXT_ALIGNMENT_LEADING);
-        fBody = gfx::Format(ui, 13.5f, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
-        fSmall = gfx::Format(ui, 12.0f, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
-        fControl = gfx::Format(ui, 14.0f, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
+        fBrand = gfx::Format(ui, design::FontBrand, 700, DWRITE_TEXT_ALIGNMENT_LEADING);
+        fTitle = gfx::Format(ui, design::FontTitle, 700, DWRITE_TEXT_ALIGNMENT_LEADING);
+        fBody = gfx::Format(ui, design::FontBody, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
+        fSmall = gfx::Format(ui, design::FontSmall, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
+        fControl = gfx::Format(ui, design::FontControl, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
         for (auto& kv : rowFormats) if (kv.second) kv.second->Release();
         rowFormats.clear();
     }
@@ -328,11 +313,11 @@ public:
         Rect track{ r.r - 40, r.Mid() - 11, r.r, r.Mid() + 11 };
         float rad = track.H() / 2;
         gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(track.l, track.t, track.r, track.b), rad, rad),
-                       Color(on ? kAccent : kSwitchTrack));
-        float knob = track.H() - 4;
+                       Color(on ? design::Accent : design::SwitchTrack));
+        float knob = track.H() - design::Gap4;
         float cx = on ? track.r - 2 - knob / 2 : track.l + 2 + knob / 2;
         ID2D1SolidColorBrush* brush = nullptr;
-        if (SUCCEEDED(dc->CreateSolidColorBrush(on ? Color(0xFFFFFFFF) : Color(0xFFC8CDD8), &brush))) {
+        if (SUCCEEDED(dc->CreateSolidColorBrush(on ? Color(design::SwitchKnob) : Color(design::SwitchTrackOff), &brush))) {
             dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, track.Mid()), knob / 2, knob / 2), brush);
             brush->Release();
         }
@@ -343,11 +328,11 @@ public:
         t = (std::max)(0.0f, (std::min)(1.0f, t));
         float left = r.l + 7, right = r.r - 7;
         float mid = r.Mid();
-        gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(left, mid - 2, right, mid + 2), 2, 2), Color(kSwitchTrack));
+        gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(left, mid - 2, right, mid + 2), design::RadiusTrack, design::RadiusTrack), Color(design::SwitchTrack));
         float knobX = left + (right - left) * t;
-        gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(left, mid - 2, knobX, mid + 2), 2, 2), Color(kAccent));
+        gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(left, mid - 2, knobX, mid + 2), design::RadiusTrack, design::RadiusTrack), Color(design::Accent));
         ID2D1SolidColorBrush* brush = nullptr;
-        if (SUCCEEDED(dc->CreateSolidColorBrush(Color(0xFFFFFFFF), &brush))) {
+        if (SUCCEEDED(dc->CreateSolidColorBrush(Color(design::SwitchKnob), &brush))) {
             dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(knobX, mid), 7, 7), brush);
             brush->Release();
         }
@@ -355,25 +340,25 @@ public:
 
     void Button(const Rect& r, const std::wstring& text, bool primary, bool hovered, bool enabled = true) {
         if (!enabled) {
-            gfx::FillRound(dc, Round(r, 8), Color(0x0EFFFFFF));
-            gfx::Text(dc, fControl, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(kTextMuted));
+            gfx::FillRound(dc, Round(r, design::RadiusControl), Color(design::RowHover));
+            gfx::Text(dc, fControl, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(design::TextMuted));
             return;
         }
-        unsigned bg = primary ? (hovered ? kAccentHover : kAccent) : (hovered ? kChipSurface : 0x14FFFFFF);
-        gfx::FillRound(dc, Round(r, 8), Color(bg));
-        if (!primary) gfx::StrokeRound(dc, Round(r, 8), Color(kChipBorder), 1.0f);
-        gfx::Text(dc, fControl, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(kText));
+        unsigned bg = primary ? (hovered ? design::AccentHover : design::Accent) : (hovered ? design::ChipSurface : design::Hover);
+        gfx::FillRound(dc, Round(r, design::RadiusControl), Color(bg));
+        if (!primary) gfx::StrokeRound(dc, Round(r, design::RadiusControl), Color(design::ChipBorder), 1.0f);
+        gfx::Text(dc, fControl, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(design::Text));
     }
 
     void Pill(const Rect& r, const std::wstring& text, bool on, bool hovered) {
-        unsigned bg = on ? kAccent : (hovered ? kChipBorder : kChipSurface);
+        unsigned bg = on ? design::Accent : (hovered ? design::ChipBorder : design::ChipSurface);
         gfx::FillRound(dc, Round(r, ChipH / 2), Color(bg));
-        if (!on) gfx::StrokeRound(dc, Round(r, ChipH / 2), Color(hovered ? kChipBorder : kLine), 1.0f);
-        gfx::Text(dc, fSmall, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(on ? kText : kTextDim));
+        if (!on) gfx::StrokeRound(dc, Round(r, ChipH / 2), Color(hovered ? design::ChipBorder : design::Line), 1.0f);
+        gfx::Text(dc, fSmall, text, D2D1::RectF(r.l, r.t, r.r, r.b), Color(on ? design::Text : design::TextDim));
     }
 
     void RowLine(float y, float left, float right) {
-        gfx::FillRect(dc, D2D1::RectF(left, y, right, y + 1), Color(kRowLine));
+        gfx::FillRect(dc, D2D1::RectF(left, y, right, y + 1), Color(design::RowLine));
     }
 
     // 优先用资源管理器缓存的当前壁纸，没有再读注册表里的路径。
@@ -424,7 +409,7 @@ public:
         float oy = box.t + (box.H() - ph) / 2;
 
         ID2D1RoundedRectangleGeometry* geom = nullptr;
-        D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(box.l, box.t, box.r, box.b), 10, 10);
+        D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(box.l, box.t, box.r, box.b), design::RadiusCard, design::RadiusCard);
         gfx::D2D()->CreateRoundedRectangleGeometry(rr, &geom);
         if (geom) {
             D2D1_LAYER_PARAMETERS lp = D2D1::LayerParameters(D2D1::InfiniteRect(), geom);
@@ -464,34 +449,34 @@ public:
 };
 
 void Settings::PaintNav(float h) {
-    gfx::FillRect(dc, D2D1::RectF(0, 0, NavWidth, h), Color(kSurfaceNav));
-    gfx::FillRect(dc, D2D1::RectF(NavWidth - 1, 0, NavWidth, h), Color(kLine));
-    gfx::Text(dc, fBrand, L"QLock", D2D1::RectF(28, 22, NavWidth - 16, 50), Color(kText));
+    gfx::FillRect(dc, D2D1::RectF(0, 0, NavWidth, h), Color(design::SurfaceNav));
+    gfx::FillRect(dc, D2D1::RectF(NavWidth - 1, 0, NavWidth, h), Color(design::Line));
+    gfx::Text(dc, fBrand, L"QLock", D2D1::RectF(28, 22, NavWidth - design::Gap16, 50), Color(design::Text));
     float y = 76;
     for (int i = 0; i < 5; ++i) {
-        Rect r{ 16, y, NavWidth - 16, y + NavItemH };
+        Rect r{ 16, y, NavWidth - design::Gap16, y + NavItemH };
         bool sel = pane == i;
         if (sel) {
-            gfx::FillRound(dc, Round(r, 8), Color(kAccentSoft));
+            gfx::FillRound(dc, Round(r, design::RadiusControl), Color(design::AccentSoft));
         } else if (hot == ID_NAV_BASE + i) {
-            gfx::FillRound(dc, Round(r, 8), Color(kChipSurface));
+            gfx::FillRound(dc, Round(r, design::RadiusControl), Color(design::ChipSurface));
         }
-        gfx::Text(dc, fBody, kNavNames[i], D2D1::RectF(r.l + 12, r.t, r.r - 8, r.b), Color(sel ? kText : kTextDim));
+        gfx::Text(dc, fBody, kNavNames[i], D2D1::RectF(r.l + design::Gap12, r.t, r.r - design::Gap8, r.b), Color(sel ? design::Text : design::TextDim));
         Widget w;
         w.id = ID_NAV_BASE + i;
         w.kind = K_NAV;
         w.rect = r;
         w.on = sel;
         widgets.push_back(w);
-        y += NavItemH + 2;
+        y += NavItemH + design::NavItemGap;
     }
 }
 
 void Settings::PaintFooter(float w, float h, float left, float right) {
-    gfx::FillRect(dc, D2D1::RectF(0, h - FooterH, w, h), Color(kSurfaceFooter));
-    gfx::FillRect(dc, D2D1::RectF(0, h - FooterH, w, h - FooterH + 1), Color(kLine));
+    gfx::FillRect(dc, D2D1::RectF(0, h - FooterH, w, h), Color(design::SurfaceFooter));
+    gfx::FillRect(dc, D2D1::RectF(0, h - FooterH, w, h - FooterH + 1), Color(design::Line));
     if (!status.empty()) {
-        gfx::Text(dc, fSmall, status, D2D1::RectF(left, h - FooterH, right - 110, h), Color(statusError ? kError : kTextMuted));
+        gfx::Text(dc, fSmall, status, D2D1::RectF(left, h - FooterH, right - 110, h), Color(statusError ? design::Error : design::TextMuted));
     }
     Rect close{ right - 96, h - FooterH + 11, right, h - FooterH + 11 + ControlH };
     Button(close, L"关闭", true, hot == ID_CLOSE);
@@ -506,7 +491,7 @@ void Settings::PaintFooter(float w, float h, float left, float right) {
 IDWriteTextFormat* Settings::RowFormat(const std::wstring& family) {
     auto it = rowFormats.find(family);
     if (it != rowFormats.end()) return it->second;
-    IDWriteTextFormat* fmt = gfx::Format(family, 14.0f, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
+    IDWriteTextFormat* fmt = gfx::Format(family, design::FontControl, 400, DWRITE_TEXT_ALIGNMENT_LEADING);
     rowFormats[family] = fmt;
     return fmt;
 }
@@ -561,19 +546,19 @@ void Settings::CommitFont(const std::wstring& family) {
 }
 
 void Settings::DrawFontDialog(float w, float h) {
-    gfx::FillRect(dc, D2D1::RectF(0, 0, w, h), Color(0xB4000000));
+    gfx::FillRect(dc, D2D1::RectF(0, 0, w, h), Color(design::Scrim));
     float cw = 440, ch = 500;
     Rect card{ (w - cw) / 2, (h - ch) / 2, (w + cw) / 2, (h + ch) / 2 };
-    gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(card.l, card.t, card.r, card.b), 12, 12), Color(kSurface));
-    gfx::StrokeRound(dc, D2D1::RoundedRect(D2D1::RectF(card.l, card.t, card.r, card.b), 12, 12), Color(kLine), 1.0f);
+    gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(card.l, card.t, card.r, card.b), design::RadiusDialog, design::RadiusDialog), Color(design::Surface));
+    gfx::StrokeRound(dc, D2D1::RoundedRect(D2D1::RectF(card.l, card.t, card.r, card.b), design::RadiusDialog, design::RadiusDialog), Color(design::Line), 1.0f);
     gfx::Text(dc, fTitle, fontForClock ? L"选择时钟字体" : L"选择界面字体",
-              D2D1::RectF(card.l + 20, card.t + 16, card.r - 20, card.t + 46), Color(kText));
+              D2D1::RectF(card.l + design::Gap20, card.t + design::Gap16, card.r - design::Gap20, card.t + 46), Color(design::Text));
 
-    Rect filter{ card.l + 20, card.t + 52, card.r - 20, card.t + 52 + ControlH };
+    Rect filter{ card.l + design::Gap20, card.t + 52, card.r - design::Gap20, card.t + 52 + ControlH };
     DrawField(filter, fontFilter, ID_FONT_FILTER, false, true, L"输入名字筛选");
 
     float rowH = 32;
-    Rect list{ card.l + 12, filter.b + 12, card.r - 12, card.b - 62 };
+    Rect list{ card.l + design::Gap12, filter.b + design::Gap12, card.r - design::Gap12, card.b - 62 };
     int visible = (int)(list.H() / rowH);
     if (visible < 1) visible = 1;
     int total = (int)fontRows.size();
@@ -589,13 +574,13 @@ void Settings::DrawFontDialog(float w, float h) {
         if (idx >= total) break;
         Rect row{ list.l, list.t + i * rowH, list.r, list.t + (i + 1) * rowH };
         if (idx == fontSel) {
-            gfx::FillRound(dc, Round(row, 6), Color(kAccentSoft));
+            gfx::FillRound(dc, Round(row, design::RadiusRow), Color(design::AccentSoft));
         } else if (hot == ID_FONT_ROW + idx) {
-            gfx::FillRound(dc, Round(row, 6), Color(kChipSurface));
+            gfx::FillRound(dc, Round(row, design::RadiusRow), Color(design::ChipSurface));
         }
         IDWriteTextFormat* fmt = RowFormat(fontRows[idx]);
-        gfx::Text(dc, fmt ? fmt : fControl, fontRows[idx], D2D1::RectF(row.l + 12, row.t, row.r - 14, row.b),
-                  Color(kText));
+        gfx::Text(dc, fmt ? fmt : fControl, fontRows[idx], D2D1::RectF(row.l + design::Gap12, row.t, row.r - 14, row.b),
+                  Color(design::Text));
         Widget wg;
         wg.id = ID_FONT_ROW + idx;
         wg.kind = K_BTN;
@@ -609,18 +594,18 @@ void Settings::DrawFontDialog(float w, float h) {
         float thumbH = (std::max)(26.0f, trackH * visible / (float)total);
         float span = (float)(std::max)(1, total - visible);
         float pos = list.t + (trackH - thumbH) * (fontTop / (float)span);
-        gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(list.r + 2, pos, list.r + 6, pos + thumbH), 2, 2),
-                       Color(kChipBorder));
+        gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(list.r + 2, pos, list.r + 6, pos + thumbH), design::RadiusTrack, design::RadiusTrack),
+                       Color(design::ChipBorder));
     }
     if (total == 0) {
-        gfx::Text(dc, fSmall, L"没有匹配的字体", D2D1::RectF(list.l + 12, list.t + 8, list.r, list.t + 30),
-                  Color(kTextMuted));
+        gfx::Text(dc, fSmall, L"没有匹配的字体", D2D1::RectF(list.l + design::Gap12, list.t + design::Gap8, list.r, list.t + 30),
+                  Color(design::TextMuted));
     }
 
     float by = card.b - 46;
-    Rect use{ card.r - 20 - 88, by, card.r - 20, by + ControlH };
-    Rect def{ use.l - 8 - 96, by, use.l - 8, by + ControlH };
-    Rect cancel{ def.l - 8 - 76, by, def.l - 8, by + ControlH };
+    Rect use{ card.r - design::Gap20 - 88, by, card.r - design::Gap20, by + ControlH };
+    Rect def{ use.l - design::Gap8 - 96, by, use.l - design::Gap8, by + ControlH };
+    Rect cancel{ def.l - design::Gap8 - 76, by, def.l - design::Gap8, by + ControlH };
     Button(cancel, L"取消", false, hot == ID_FONT_CANCEL);
     Button(def, L"用默认", false, hot == ID_FONT_DEFAULT);
     Button(use, L"使用", true, hot == ID_FONT_USE);
@@ -631,15 +616,15 @@ void Settings::DrawFontDialog(float w, float h) {
 
 void Settings::LayoutLook(float left, float right, float top, float bottom) {
     Rect box{ left, top, right, top + PreviewH };
-    gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(box.l, box.t, box.r, box.b), 10, 10), Color(kSurfaceNav));
+    gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(box.l, box.t, box.r, box.b), design::RadiusCard, design::RadiusCard), Color(design::SurfaceNav));
     DrawPreview(box);
-    float y = box.b + 8 - scroll;
+    float y = box.b + design::Gap8 - scroll;
 
-    dc->PushAxisAlignedClip(D2D1::RectF(left, box.b + 8, right, bottom), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    dc->PushAxisAlignedClip(D2D1::RectF(left, box.b + design::Gap8, right, bottom), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
 
     // 锁屏主题：标签一行，下面四颗药丸。
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"锁屏主题", D2D1::RectF(left, y + 10, right, y + 32), Color(kText));
+    gfx::Text(dc, fBody, L"锁屏主题", D2D1::RectF(left, y + 10, right, y + 32), Color(design::Text));
     float px = left, py = y + 38;
     const std::vector<LockTheme>& all = themes::All();
     int current = ThemeIndex();
@@ -653,7 +638,7 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
         wg.rect = pill;
         wg.on = on;
         widgets.push_back(wg);
-        px += 118 + 8;
+        px += 118 + design::Gap8;
     }
     {
         Rect pill{ px, py, px + 118, py + ChipH };
@@ -664,14 +649,14 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
         wg.rect = pill;
         widgets.push_back(wg);
     }
-    y += 38 + ChipH + 12;
+    y += 38 + ChipH + design::Gap12;
 
     // 背景图片
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"背景图片", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
+    gfx::Text(dc, fBody, L"背景图片", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
     {
-        Rect clear{ right - 88, y + 12, right, y + 12 + ControlH };
-        Rect pick{ clear.l - 8 - 240, y + 12, clear.l - 8, y + 12 + ControlH };
+        Rect clear{ right - 88, y + design::Gap12, right, y + design::Gap12 + ControlH };
+        Rect pick{ clear.l - design::Gap8 - 240, y + design::Gap12, clear.l - design::Gap8, y + design::Gap12 + ControlH };
         std::wstring name = app::cfg.BackgroundImage.empty() ? L"选一张本地图片" : LeafName(app::cfg.BackgroundImage);
         Button(pick, name, false, hot == ID_BG_PICK);
         Button(clear, L"恢复纯色", false, hot == ID_BG_CLEAR);
@@ -682,8 +667,8 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
 
     auto toggleRow = [&](float yy, const wchar_t* label, bool value, int id) {
         RowLine(yy, left, right);
-        gfx::Text(dc, fBody, label, D2D1::RectF(left, yy, left + 320, yy + RowH), Color(kText));
-        Rect r{ right - 40, yy + 12, right, yy + 12 + ControlH };
+        gfx::Text(dc, fBody, label, D2D1::RectF(left, yy, left + 320, yy + RowH), Color(design::Text));
+        Rect r{ right - 40, yy + design::Gap12, right, yy + design::Gap12 + ControlH };
         Toggle(r, value);
         Widget wg; wg.id = id; wg.kind = K_TOGGLE; wg.rect = r; wg.on = value; widgets.push_back(wg);
     };
@@ -696,12 +681,12 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
     auto sliderRow = [&](float yy, const wchar_t* label, double value, double minv, double maxv,
                          const wchar_t* unit, int id) {
         RowLine(yy, left, right);
-        gfx::Text(dc, fBody, label, D2D1::RectF(left, yy, left + 220, yy + RowH), Color(kText));
-        Rect track{ right - 210 - 56, yy + 12, right - 56, yy + 12 + ControlH };
+        gfx::Text(dc, fBody, label, D2D1::RectF(left, yy, left + 220, yy + RowH), Color(design::Text));
+        Rect track{ right - 210 - 56, yy + design::Gap12, right - 56, yy + design::Gap12 + ControlH };
         Slider(track, value, minv, maxv);
         wchar_t text[32] = {};
         _snwprintf_s(text, _countof(text), _TRUNCATE, L"%.0f%s", value, unit);
-        gfx::Text(dc, fSmall, text, D2D1::RectF(right - 50, yy, right, yy + RowH), Color(kTextDim));
+        gfx::Text(dc, fSmall, text, D2D1::RectF(right - 50, yy, right, yy + RowH), Color(design::TextDim));
         Widget wg; wg.id = id; wg.kind = K_SLIDER; wg.rect = track; wg.value = value; wg.minv = minv; wg.maxv = maxv;
         widgets.push_back(wg);
     };
@@ -714,22 +699,22 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
 
     // 提示文字：开关 + 输入框
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"提示文字", D2D1::RectF(left, y, left + 160, y + RowH), Color(kText));
+    gfx::Text(dc, fBody, L"提示文字", D2D1::RectF(left, y, left + 160, y + RowH), Color(design::Text));
     {
-        Rect toggleR{ right - 40, y + 12, right, y + 12 + ControlH };
+        Rect toggleR{ right - 40, y + design::Gap12, right, y + design::Gap12 + ControlH };
         Toggle(toggleR, app::cfg.ShowSubtitle);
         Widget wg; wg.id = ID_SHOW_SUBTITLE; wg.kind = K_TOGGLE; wg.rect = toggleR; wg.on = app::cfg.ShowSubtitle;
         widgets.push_back(wg);
-        subtitleRect = Rect{ toggleR.l - 8 - 190, y + 12, toggleR.l - 8, y + 12 + ControlH };
+        subtitleRect = Rect{ toggleR.l - design::Gap8 - 190, y + design::Gap12, toggleR.l - design::Gap8, y + design::Gap12 + ControlH };
         DrawField(subtitleRect, subtitleText, ID_EDIT_SUBTITLE, false, app::cfg.ShowSubtitle, L"输入密码解锁");
     }
     y += RowH;
 
     // 界面字体
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"界面字体", D2D1::RectF(left, y, left + 220, y + RowH), Color(kText));
+    gfx::Text(dc, fBody, L"界面字体", D2D1::RectF(left, y, left + 220, y + RowH), Color(design::Text));
     {
-        Rect pick{ right - 240, y + 12, right, y + 12 + ControlH };
+        Rect pick{ right - 240, y + design::Gap12, right, y + design::Gap12 + ControlH };
         Button(pick, fonts::Label(app::cfg.FontFamily), false, hot == ID_FONT_UI);
         Widget wg; wg.id = ID_FONT_UI; wg.kind = K_BTN; wg.rect = pick; widgets.push_back(wg);
     }
@@ -737,20 +722,20 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
 
     // 时钟字体：开关关掉时右边的按钮跟着变灰。
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"时钟字体", D2D1::RectF(left, y, left + 220, y + RowH), Color(kText));
+    gfx::Text(dc, fBody, L"时钟字体", D2D1::RectF(left, y, left + 220, y + RowH), Color(design::Text));
     {
         bool on = app::cfg.ClockFontEnabled;
-        Rect toggleR{ right - 40, y + 12, right, y + 12 + ControlH };
+        Rect toggleR{ right - 40, y + design::Gap12, right, y + design::Gap12 + ControlH };
         Toggle(toggleR, on);
         Widget t; t.id = ID_FONT_CLOCK_ON; t.kind = K_TOGGLE; t.rect = toggleR; t.on = on; widgets.push_back(t);
-        Rect pick{ toggleR.l - 8 - 190, y + 12, toggleR.l - 8, y + 12 + ControlH };
+        Rect pick{ toggleR.l - design::Gap8 - 190, y + design::Gap12, toggleR.l - design::Gap8, y + design::Gap12 + ControlH };
         Button(pick, fonts::Label(app::cfg.ClockFont), false, on && hot == ID_FONT_CLOCK, on);
         if (on) { Widget wg; wg.id = ID_FONT_CLOCK; wg.kind = K_BTN; wg.rect = pick; widgets.push_back(wg); }
     }
     y += RowH;
 
-    float total = (y + scroll) - (box.b + 8);
-    float visible = bottom - (box.b + 8);
+    float total = (y + scroll) - (box.b + design::Gap8);
+    float visible = bottom - (box.b + design::Gap8);
     scrollMax = (std::max)(0.0f, total - visible);
 
     dc->PopAxisAlignedClip();
@@ -759,46 +744,46 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
 void Settings::LayoutUnlock(float left, float right, float top, float bottom) {
     float y = top - scroll;
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"锁屏密码", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
+    gfx::Text(dc, fBody, L"锁屏密码", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
     {
-        Rect apply{ right - 76, y + 12, right, y + 12 + ControlH };
-        Rect eye{ apply.l - 8 - 34, y + 12, apply.l - 8, y + 12 + ControlH };
-        passwordRect = Rect{ eye.l - 8 - 260, y + 12, eye.l - 8, y + 12 + ControlH };
+        Rect apply{ right - 76, y + design::Gap12, right, y + design::Gap12 + ControlH };
+        Rect eye{ apply.l - design::Gap8 - 34, y + design::Gap12, apply.l - design::Gap8, y + design::Gap12 + ControlH };
+        passwordRect = Rect{ eye.l - design::Gap8 - 260, y + design::Gap12, eye.l - design::Gap8, y + design::Gap12 + ControlH };
         DrawField(passwordRect, passwordText, ID_EDIT_PASSWORD, !reveal, true, L"输入新密码");
-        gfx::FillRound(dc, Round(eye, 8), Color(hot == ID_REVEAL ? kChipSurface : 0x14FFFFFF));
-        gfx::Text(dc, fSmall, reveal ? L"隐藏" : L"显示", D2D1::RectF(eye.l, eye.t, eye.r, eye.b), Color(kTextDim));
+        gfx::FillRound(dc, Round(eye, design::RadiusControl), Color(hot == ID_REVEAL ? design::ChipSurface : design::Hover));
+        gfx::Text(dc, fSmall, reveal ? L"隐藏" : L"显示", D2D1::RectF(eye.l, eye.t, eye.r, eye.b), Color(design::TextDim));
         Button(apply, L"设置", true, hot == ID_APPLY_PASSWORD);
         Widget a; a.id = ID_REVEAL; a.kind = K_BTN; a.rect = eye; widgets.push_back(a);
         Widget b; b.id = ID_APPLY_PASSWORD; b.kind = K_BTN; b.rect = apply; widgets.push_back(b);
     }
     y += RowH;
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"恢复码", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
+    gfx::Text(dc, fBody, L"恢复码", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
     {
-        Rect make{ right - 132, y + 12, right, y + 12 + ControlH };
+        Rect make{ right - 132, y + design::Gap12, right, y + design::Gap12 + ControlH };
         std::wstring note = !shownCode.empty() ? (shownCode + L"（已复制，用一次就失效）")
                            : app::HasRecovery() ? L"已设置，用一次就失效"
                                                 : L"还没设置";
-        gfx::Text(dc, fSmall, note, D2D1::RectF(left + 200, y, make.l - 16, y + RowH),
-                  Color(shownCode.empty() ? kTextMuted : kText));
+        gfx::Text(dc, fSmall, note, D2D1::RectF(left + 200, y, make.l - design::Gap16, y + RowH),
+                  Color(shownCode.empty() ? design::TextMuted : design::Text));
         Button(make, L"生成新的恢复码", false, hot == ID_RECOVERY);
         Widget r; r.id = ID_RECOVERY; r.kind = K_BTN; r.rect = make; widgets.push_back(r);
     }
     y += RowH;
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"Windows 账户", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
-    gfx::Text(dc, fSmall, L"QLock 不碰系统账户，只盖一层自己的锁屏", D2D1::RectF(left + 200, y, right, y + RowH), Color(kTextMuted));
-    y += RowH + 8;
+    gfx::Text(dc, fBody, L"Windows 账户", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
+    gfx::Text(dc, fSmall, L"QLock 不碰系统账户，只盖一层自己的锁屏", D2D1::RectF(left + 200, y, right, y + RowH), Color(design::TextMuted));
+    y += RowH + design::Gap8;
     gfx::TextWrapped(dc, fSmall, L"改完点「设置」，密码按 PBKDF2-SHA256 存，另存一份 DPAPI 加密的明文只给这里回显；恢复码同样只存 hash，用过一次就清掉。",
-                     D2D1::RectF(left, y, right, y + 40), Color(kTextMuted));
+                     D2D1::RectF(left, y, right, y + 40), Color(design::TextMuted));
 }
 
 void Settings::LayoutStart(float left, float right, float top, float bottom) {
     float y = top - scroll;
     auto toggleRow = [&](float yy, const wchar_t* label, bool value, int id) {
         RowLine(yy, left, right);
-        gfx::Text(dc, fBody, label, D2D1::RectF(left, yy, left + 320, yy + RowH), Color(kText));
-        Rect r{ right - 40, yy + 12, right, yy + 12 + ControlH };
+        gfx::Text(dc, fBody, label, D2D1::RectF(left, yy, left + 320, yy + RowH), Color(design::Text));
+        Rect r{ right - 40, yy + design::Gap12, right, yy + design::Gap12 + ControlH };
         Toggle(r, value);
         Widget wg; wg.id = id; wg.kind = K_TOGGLE; wg.rect = r; wg.on = value; widgets.push_back(wg);
     };
@@ -811,12 +796,12 @@ void Settings::LayoutStart(float left, float right, float top, float bottom) {
 
     // 空闲自动锁定：分钟数自己画一个输入框，0 表示不锁。
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"空闲自动锁定", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
+    gfx::Text(dc, fBody, L"空闲自动锁定", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
     {
-        Rect field{ left + 200, y + 12, left + 270, y + 12 + ControlH };
+        Rect field{ left + 200, y + design::Gap12, left + 270, y + design::Gap12 + ControlH };
         DrawField(field, idleText, ID_EDIT_IDLE, false, true, L"0");
-        gfx::Text(dc, fSmall, L"分钟（0 = 不锁）", D2D1::RectF(field.r + 12, y, right - 40, y + RowH),
-                  Color(kTextDim));
+        gfx::Text(dc, fSmall, L"分钟（0 = 不锁）", D2D1::RectF(field.r + design::Gap12, y, right - 40, y + RowH),
+                  Color(design::TextDim));
     }
     y += RowH;
 
@@ -832,9 +817,9 @@ void Settings::LayoutStart(float left, float right, float top, float bottom) {
 void Settings::LayoutHard(float left, float right, float top, float bottom) {
     float y = top - scroll;
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"锁定时拦截系统热键", D2D1::RectF(left, y, left + 320, y + RowH), Color(kText));
+    gfx::Text(dc, fBody, L"锁定时拦截系统热键", D2D1::RectF(left, y, left + 320, y + RowH), Color(design::Text));
     {
-        Rect r{ right - 40, y + 12, right, y + 12 + ControlH };
+        Rect r{ right - 40, y + design::Gap12, right, y + design::Gap12 + ControlH };
         Toggle(r, app::cfg.BlockSystemHotkeys);
         Widget wg;
         wg.id = ID_BLOCK_HOTKEYS;
@@ -843,7 +828,7 @@ void Settings::LayoutHard(float left, float right, float top, float bottom) {
         wg.on = app::cfg.BlockSystemHotkeys;
         widgets.push_back(wg);
     }
-    y += RowH + 8;
+    y += RowH + design::Gap8;
 
     const wchar_t* notes[3] = {
         L"打开后，锁屏期间 Win、Win+Tab、Alt+Tab、Ctrl+Esc、Alt+F4 都不起作用。",
@@ -851,7 +836,7 @@ void Settings::LayoutHard(float left, float right, float top, float bottom) {
         L"接管 Win+L 和 Ctrl+Alt+L 在「启动与锁定」页。",
     };
     for (int i = 0; i < 3; ++i) {
-        gfx::Text(dc, fSmall, notes[i], D2D1::RectF(left, y, right, y + 26), Color(kTextMuted));
+        gfx::Text(dc, fSmall, notes[i], D2D1::RectF(left, y, right, y + 26), Color(design::TextMuted));
         y += 26;
     }
     scrollMax = (std::max)(0.0f, (y + scroll) - bottom);
@@ -860,7 +845,7 @@ void Settings::LayoutHard(float left, float right, float top, float bottom) {
 void Settings::LayoutAbout(float left, float right, float top, float bottom) {
     float y = top - scroll;
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"版本", D2D1::RectF(left, y, left + 200, y + RowH), Color(kText));
+    gfx::Text(dc, fBody, L"版本", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
     {
         bool busy = updateState == U_CHECKING || updateState == U_DOWNLOADING || updateState == U_INSTALLING ||
                     updateState == U_READY;
@@ -868,9 +853,9 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
         float checkLeft = right - 100 - (skip ? 104 : 0);
         // 两个按钮并排时，标签栏留 200 就放不下版本号了，这一行改窄一点。
         float valueLeft = skip ? left + 100 : left + 200;
-        float valueRight = (skip ? checkLeft - 104 : checkLeft) - 8;
+        float valueRight = (skip ? checkLeft - 104 : checkLeft) - design::Gap8;
         gfx::Text(dc, fBody, updater::CurrentVersion(),
-                  D2D1::RectF(valueLeft, y, valueRight, y + RowH), Color(kTextDim));
+                  D2D1::RectF(valueLeft, y, valueRight, y + RowH), Color(design::TextDim));
 
         const wchar_t* label = L"检查更新";
         if (updateState == U_CHECKING) label = L"检查中…";
@@ -878,7 +863,7 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
         else if (updateState == U_DOWNLOADING) label = L"下载中…";
         else if (updateState == U_INSTALLING || updateState == U_READY) label = L"正在安装…";
 
-        Rect check{ checkLeft, y + 12, checkLeft + 100, y + 12 + ControlH };
+        Rect check{ checkLeft, y + design::Gap12, checkLeft + 100, y + design::Gap12 + ControlH };
         Button(check, label, updateState == U_NEWER, hot == ID_CHECK_UPDATE, !busy);
         if (!busy) {
             Widget wg;
@@ -888,7 +873,7 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
             widgets.push_back(wg);
         }
         if (skip) {
-            Rect skipRect{ checkLeft - 104, y + 12, checkLeft - 8, y + 12 + ControlH };
+            Rect skipRect{ checkLeft - 104, y + design::Gap12, checkLeft - design::Gap8, y + design::Gap12 + ControlH };
             Button(skipRect, L"跳过这个版本", false, hot == ID_SKIP_UPDATE, true);
             Widget wg;
             wg.id = ID_SKIP_UPDATE;
@@ -897,25 +882,25 @@ void Settings::LayoutAbout(float left, float right, float top, float bottom) {
             widgets.push_back(wg);
         }
     }
-    y += RowH - 8;
-    gfx::Text(dc, fSmall, L"C++ 重写，Direct2D 直绘", D2D1::RectF(left, y, right, y + 22), Color(kTextMuted));
+    y += RowH - design::Gap8;
+    gfx::Text(dc, fSmall, L"C++ 重写，Direct2D 直绘", D2D1::RectF(left, y, right, y + 22), Color(design::TextMuted));
     y += 26;
 
     RowLine(y, left, right);
-    gfx::Text(dc, fBody, L"文件位置", D2D1::RectF(left, y, left + 200, y + 30), Color(kText));
+    gfx::Text(dc, fBody, L"文件位置", D2D1::RectF(left, y, left + 200, y + 30), Color(design::Text));
     y += 34;
     const std::wstring paths[3] = { L"配置：" + app::ConfigPath(), L"日志：" + app::LogPath(),
                                     L"主题：" + app::ThemeDir() };
     for (int i = 0; i < 3; ++i) {
-        gfx::Text(dc, fSmall, paths[i], D2D1::RectF(left, y, right, y + 22), Color(kTextMuted));
+        gfx::Text(dc, fSmall, paths[i], D2D1::RectF(left, y, right, y + 22), Color(design::TextMuted));
         y += 22;
     }
     y += 12;
     gfx::Text(dc, fSmall, L"MIT 协议 · https://github.com/haha0614/QLock",
-              D2D1::RectF(left, y, right, y + 22), Color(kTextDim));
+              D2D1::RectF(left, y, right, y + 22), Color(design::TextDim));
     y += 22;
     gfx::Text(dc, fSmall, L"C# 版（0.3.0）在 haha0614/QLock-CSharp",
-              D2D1::RectF(left, y, right, y + 22), Color(kTextMuted));
+              D2D1::RectF(left, y, right, y + 22), Color(design::TextMuted));
     y += 22;
     scrollMax = (std::max)(0.0f, (y + scroll) - bottom);
 }
@@ -1031,13 +1016,13 @@ void Settings::Paint() {
 
     dc->BeginDraw();
     dc->SetTransform(D2D1::Matrix3x2F::Identity());
-    gfx::FillRect(dc, D2D1::RectF(0, 0, w, h), Color(kSurface));
+    gfx::FillRect(dc, D2D1::RectF(0, 0, w, h), Color(design::Surface));
 
     PaintNav(h);
 
     float left = NavWidth + PanePad, right = w - PanePad;
-    gfx::Text(dc, fTitle, kNavNames[pane], D2D1::RectF(left, 18, right, 50), Color(kText));
-    float top = 62, bottom = h - FooterH;
+    gfx::Text(dc, fTitle, kNavNames[pane], D2D1::RectF(left, design::TitleTop, right, design::TitleTop + design::TitleH), Color(design::Text));
+    float top = design::PaneTop, bottom = h - FooterH;
 
     if (pane == 1) {
         LayoutLook(left, right, top, bottom);
@@ -1071,21 +1056,22 @@ void Settings::Paint() {
 // ---- 输入框：自己画，不用子窗口（flip 交换链上子窗口会被盖住）----
 void Settings::DrawField(const Rect& r, const std::wstring& text, int id, bool password, bool enabled,
                          const std::wstring& hint) {
-    bool focused = focus == id;
-    gfx::FillRound(dc, Round(r, 8), Color(kInputBg));
-    gfx::StrokeRound(dc, Round(r, 8), Color(focused ? kAccent : (enabled ? kInputBorder : kLine)), 1.0f);
-
-    std::wstring shown = password ? std::wstring(text.size(), L'\u2022') : text;
-    D2D1_RECT_F box = D2D1::RectF(r.l + 10, r.t, r.r - 12, r.b);
-    if (shown.empty()) {
-        gfx::Text(dc, fControl, hint, box, Color(kTextMuted));
-    } else {
-        gfx::Text(dc, fControl, shown, box, Color(enabled ? kText : kTextMuted));
-    }
-    if (focused && caretOn) {
-        float cx = r.l + 10 + gfx::Measure(fControl, shown) + 1;
-        gfx::FillRect(dc, D2D1::RectF(cx, r.t + 8, cx + 1.5f, r.b - 8), Color(kText));
-    }
+    const bool focused = focus == id;
+    gfx::FieldStyle st;
+    st.radius = design::RadiusControl;
+    st.inset = design::FieldInset;
+    st.caretW = design::FieldCaretW;
+    st.caretH = design::FieldCaretH;
+    st.caretLift = design::FieldCaretLift;
+    st.dotStep = design::DotStep;
+    st.dotRadius = design::DotRadius;
+    st.dots = password;
+    st.bg = Color(design::InputBg);
+    st.border = Color(focused ? design::Accent : (enabled ? design::InputBorder : design::Line));
+    st.fg = Color(enabled ? design::Text : design::TextMuted);
+    st.hint = Color(design::TextMuted);
+    gfx::Field(dc, fControl, design::FontControl, D2D1::RectF(r.l, r.t, r.r, r.b), text, hint.c_str(), st,
+               enabled, caretOn);
 
     Widget wg;
     wg.id = id;
