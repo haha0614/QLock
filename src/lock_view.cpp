@@ -304,9 +304,11 @@ void View::DrawField(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const std::
     float inset = underline ? 0.0f : 13.0f;
     float textLeft = box.left + inset;
     float textW = box.right - textLeft - inset;
+    // 提示文字和密码圆点共用同一个文本起点（13px 内边距），光标比它们再靠左 2px，
+    // 位置和量过的 0.3.0 一致：圆点 7px 直径、间隔 10px。
+    const float textOrigin = textLeft;
     if (text.empty()) {
-        // 光标停在左内边距上，提示紧挨着它开始，两者的距离和输入第一个圆点后的位置一致。
-        gfx::Text(dc, editFmt, hint, D2D1::RectF(textLeft + 5.0f, box.top, textLeft + textW, box.bottom),
+        gfx::Text(dc, editFmt, hint, D2D1::RectF(textOrigin, box.top, textLeft + textW, box.bottom),
                   themes::Color(theme.Input.Hint, gfx::Color(0xFF7B8391)));
     }
 
@@ -315,15 +317,15 @@ void View::DrawField(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const std::
     ID2D1SolidColorBrush* dot = nullptr;
     if (FAILED(dc->CreateSolidColorBrush(fg, &dot))) return;
     float cy = (box.top + box.bottom) / 2;
-    float step = (float)theme.Input.Size * 0.85f;
-    float r = (std::max)(3.0f, (float)theme.Input.Size * 0.22f);
+    float step = (float)theme.Input.Size * 0.67f;
+    float r = (float)theme.Input.Size * 0.23f;
     for (size_t i = 0; i < text.size(); ++i) {
-        float cx = textLeft + r + step * (float)i;
+        float cx = textOrigin + r + step * (float)i;
         dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), dot);
     }
     if (caretOn && enabled) {
-        float cx = textLeft + step * (float)text.size();
-        dc->FillRectangle(D2D1::RectF(cx, cy - 9.0f, cx + 1.5f, cy + 9.0f), dot);
+        float cx = text.empty() ? textLeft - 2.0f : textOrigin + step * (float)text.size();
+        dc->FillRectangle(D2D1::RectF(cx, cy - 8.0f, cx + 1.8f, cy + 8.0f), dot);
     }
     dot->Release();
 }
