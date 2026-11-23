@@ -105,6 +105,8 @@ bool LoadConfig() {
     if (kv.count(L"BackgroundColor")) cfg.BackgroundColor = json::Unescape(kv[L"BackgroundColor"]);
     if (kv.count(L"BackgroundImage")) cfg.BackgroundImage = json::Unescape(kv[L"BackgroundImage"]);
     cfg.BackgroundSnapshot = json::GetBool(kv[L"BackgroundSnapshot"], cfg.BackgroundSnapshot);
+    cfg.BackgroundMode.clear();
+    if (kv.count(L"BackgroundMode")) cfg.BackgroundMode = json::Unescape(kv[L"BackgroundMode"]);
     if (kv.count(L"BlurRadius")) cfg.BlurRadius = json::GetInt(kv[L"BlurRadius"], cfg.BlurRadius);
     cfg.BlockSystemHotkeys = json::GetBool(kv[L"BlockSystemHotkeys"], cfg.BlockSystemHotkeys);
     if (kv.count(L"ClockFont")) cfg.ClockFont = json::Unescape(kv[L"ClockFont"]);
@@ -140,6 +142,7 @@ bool SaveConfig() {
         << L",\"BackgroundColor\":" << json::Quote(cfg.BackgroundColor)
         << L",\"BackgroundImage\":" << json::Quote(cfg.BackgroundImage)
         << L",\"BackgroundSnapshot\":" << (cfg.BackgroundSnapshot ? L"true" : L"false")
+        << L",\"BackgroundMode\":" << json::Quote(cfg.BackgroundMode)
         << L",\"BlurRadius\":" << cfg.BlurRadius
         << L",\"BlockSystemHotkeys\":" << (cfg.BlockSystemHotkeys ? L"true" : L"false")
         << L",\"ClockFont\":" << json::Quote(cfg.ClockFont)
@@ -242,6 +245,16 @@ void SetPassword(const std::wstring& password) {
     cfg.PasswordCipher = Protect(password);
     SaveConfig();
     Log(L"password updated");
+}
+
+// 背景样式：0 纯色、1 屏幕截图、2 自定义图片。没写过 BackgroundMode 的旧配置按老字段推断。
+int BackgroundKind() {
+    if (cfg.BackgroundMode == L"snapshot") return 1;
+    if (cfg.BackgroundMode == L"image") return 2;
+    if (cfg.BackgroundMode == L"solid") return 0;
+    if (cfg.BackgroundSnapshot && cfg.BackgroundImage.empty()) return 1;
+    if (!cfg.BackgroundImage.empty()) return 2;
+    return 0;
 }
 
 std::wstring StoredPassword() {

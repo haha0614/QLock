@@ -97,6 +97,7 @@ enum {
     ID_BG_SNAP = 304,
     ID_BG_IMAGE = 305,
     ID_BG_COLOR = 306,
+    ID_BG_SWAP = 307,
     ID_SHOW_CLOCK = 310,
     ID_SNAPSHOT = 311,
     ID_SHOW_SUBTITLE = 312,
@@ -107,6 +108,8 @@ enum {
     ID_RECOVERY = 332,
     ID_REVEAL = 331,
     ID_CLOSE = 400,
+    ID_APPLY_ALL = 401,
+    ID_APPLY_CLOSE = 402,
     ID_EDIT_SUBTITLE = 500,
     ID_EDIT_PASSWORD = 501,
     ID_EDIT_IDLE = 502,
@@ -156,6 +159,7 @@ public:
     std::vector<std::wstring> fontRows;
     int fontSel = 0;
     int fontTop = 0;
+    Rect fontRect;   // 浮层卡片占的地方，点外面就关掉
     std::map<std::wstring, IDWriteTextFormat*> rowFormats;
 
     IDWriteTextFormat* fBrand = nullptr;
@@ -182,7 +186,7 @@ public:
     std::wstring status;
     bool statusError = false;
     std::wstring shownCode;   // 刚生成的恢复码，只在本次打开窗口时显示
-    UINT_PTR saveTimer = 0;
+    bool dirty = false;       // 有改动还没点「应用」
 
     static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
@@ -271,15 +275,16 @@ public:
 
     void Invalidate() { InvalidateRect(hwnd, nullptr, FALSE); }
 
-    void QueueSave() {
-        if (saveTimer) KillTimer(hwnd, saveTimer);
-        saveTimer = SetTimer(hwnd, 3, 400, nullptr);
+    // 改设置只改内存里的 cfg，点「应用」才落盘；关窗口时没保存就整个丢掉。
+    void MarkDirty() {
+        dirty = true;
+        Invalidate();
     }
 
-    void FlushSave() {
-        if (saveTimer) { KillTimer(hwnd, 3); saveTimer = 0; }
+    void SaveNow() {
+        dirty = false;
         if (app::SaveConfig()) {
-            status = L"已保存，下次锁屏生效";
+            status = L"已保存";
             statusError = false;
         } else {
             status = L"保存失败，看看日志";
@@ -396,7 +401,7 @@ public:
     void DrawPreview(const Rect& box) {
         // 没挑背景图又勾了截图背景时，预览拿当前桌面壁纸顶替——真锁屏截的是锁那一刻的屏幕。
         std::wstring override;
-        if (app::cfg.BackgroundImage.empty() && app::cfg.BackgroundSnapshot) override = DesktopWallpaper();
+        if (app::BackgroundKind() == 1) override = DesktopWallpaper();
         if (override != preview.imageOverride) {
             preview.imageOverride = override;
             preview.DropDeviceResources();
@@ -412,10 +417,8 @@ public:
         float ph = 540 * s;
         float ox = box.l;
         float oy = box.t + (box.H() - ph) / 2;
-        // 预览框的圆角跟着圆角滑块走（按预览缩放比例换算），滑块一动这里就变。
-        float frameR = app::cfg.CornerRadius >= 0 ? (float)app::cfg.CornerRadius * s : design::RadiusCard;
-        if (frameR < 0) frameR = 0;
-        if (frameR > box.H() * 0.5f) frameR = box.H() * 0.5f;
+        // 预览框是设置窗自己的控件，圆角固定，不跟锁屏的圆角滑块走。
+        float frameR = design::RadiusCard;
 
         ID2D1RoundedRectangleGeometry* geom = nullptr;
         D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(box.l, box.t, box.r, box.b), frameR, frameR);
@@ -450,10 +453,7 @@ public:
     void PickBackgroundImage();
 
     // 0 = 纯色，1 = 屏幕截图，2 = 自定义图片。
-    static int BgMode() {
-        if (!app::cfg.BackgroundImage.empty()) return 2;
-        return app::cfg.BackgroundSnapshot ? 1 : 0;
-    }
+    static int BgMode() { return app::BackgroundKind(); }
     static D2D1_COLOR_F BgColor(const LockTheme& t) {
         D2D1_COLOR_F base = themes::Color(t.Background.Color, gfx::Color(0xFF080A10));
         return app::cfg.BackgroundColor.empty() ? base : themes::Color(app::cfg.BackgroundColor, base);
@@ -502,17 +502,22 @@ void Settings::PaintNav(float h) {
 void Settings::PaintFooter(float w, float h, float left, float right) {
     gfx::FillRect(dc, D2D1::RectF(0, h - FooterH, w, h), Color(design::SurfaceFooter));
     gfx::FillRect(dc, D2D1::RectF(0, h - FooterH, w, h - FooterH + 1), Color(design::Line));
+    const float y = h - FooterH + 11;
+    Rect close{ right - 88, y, right, y + ControlH };
+    Rect applyClose{ close.l - design::Gap8 - 116, y, close.l - design::Gap8, y + ControlH };
+    Rect applyAll{ applyClose.l - design::Gap8 - 76, y, applyClose.l - design::Gap8, y + ControlH };
     if (!status.empty()) {
-        gfx::TextCentered(dc, fSmall, status, D2D1::RectF(left, h - FooterH, right - 110, h),
+        gfx::TextCentered(dc, fSmall, status, D2D1::RectF(left, h - FooterH, applyAll.l - design::Gap16, h),
                           Color(statusError ? design::Error : design::TextMuted));
     }
-    Rect close{ right - 96, h - FooterH + 11, right, h - FooterH + 11 + ControlH };
-    Button(close, L"关闭", true, hot == ID_CLOSE);
-    Widget wg;
-    wg.id = ID_CLOSE;
-    wg.kind = K_BTN;
-    wg.rect = close;
-    widgets.push_back(wg);
+    Button(applyAll, L"应用", true, hot == ID_APPLY_ALL, dirty);
+    Button(applyClose, L"应用并关闭", false, hot == ID_APPLY_CLOSE, dirty);
+    Button(close, L"关闭", false, hot == ID_CLOSE);
+    if (dirty) {
+        Widget a; a.id = ID_APPLY_ALL; a.kind = K_BTN; a.rect = applyAll; widgets.push_back(a);
+        Widget b; b.id = ID_APPLY_CLOSE; b.kind = K_BTN; b.rect = applyClose; widgets.push_back(b);
+    }
+    Widget c; c.id = ID_CLOSE; c.kind = K_BTN; c.rect = close; widgets.push_back(c);
 }
 
 // ---- 字体选择器 ----
@@ -568,7 +573,7 @@ void Settings::CommitFont(const std::wstring& family) {
     else app::cfg.FontFamily = family;
     MakeFormats();
     previewLoaded = false;
-    QueueSave();
+    MarkDirty();
     CloseFontDialog();
     SetStatus(clock ? L"时钟字体已换，下次锁屏生效" : L"字体已换，界面和锁屏都用它", false);
 }
@@ -577,6 +582,7 @@ void Settings::DrawFontDialog(float w, float h) {
     gfx::FillRect(dc, D2D1::RectF(0, 0, w, h), Color(design::Scrim));
     float cw = 440, ch = 500;
     Rect card{ (w - cw) / 2, (h - ch) / 2, (w + cw) / 2, (h + ch) / 2 };
+    fontRect = card;
     gfx::FillRound(dc, D2D1::RoundedRect(D2D1::RectF(card.l, card.t, card.r, card.b), design::RadiusDialog, design::RadiusDialog), Color(design::Surface));
     gfx::StrokeRound(dc, D2D1::RoundedRect(D2D1::RectF(card.l, card.t, card.r, card.b), design::RadiusDialog, design::RadiusDialog), Color(design::Line), 1.0f);
     gfx::Text(dc, fTitle, fontForClock ? L"选择时钟字体" : L"选择界面字体",
@@ -717,11 +723,16 @@ void Settings::LayoutLook(float left, float right, float top, float bottom) {
     } else {
         gfx::Text(dc, fBody, L"背景图片", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
         Rect clear{ right - 88, y + design::Gap12, right, y + design::Gap12 + ControlH };
-        Rect pick{ clear.l - design::Gap8 - 240, y + design::Gap12, clear.l - design::Gap8, y + design::Gap12 + ControlH };
-        std::wstring name = app::cfg.BackgroundImage.empty() ? L"选一张本地图片" : LeafName(app::cfg.BackgroundImage);
-        Button(pick, name, false, hot == ID_BG_PICK);
+        Rect swap{ clear.l - design::Gap8 - 76, y + design::Gap12, clear.l - design::Gap8, y + design::Gap12 + ControlH };
+        Rect pick{ swap.l - design::Gap8 - 200, y + design::Gap12, swap.l - design::Gap8, y + design::Gap12 + ControlH };
+        const bool hasImage = !app::cfg.BackgroundImage.empty();
+        Button(pick, hasImage ? LeafName(app::cfg.BackgroundImage) : L"还没选图片", false, hot == ID_BG_PICK, hasImage);
+        Button(swap, hasImage ? L"更换" : L"选择", false, hot == ID_BG_SWAP);
         Button(clear, L"清除", false, hot == ID_BG_CLEAR);
-        Widget a; a.id = ID_BG_PICK; a.kind = K_BTN; a.rect = pick; widgets.push_back(a);
+        if (hasImage) {
+            Widget a; a.id = ID_BG_PICK; a.kind = K_BTN; a.rect = pick; widgets.push_back(a);
+        }
+        Widget s; s.id = ID_BG_SWAP; s.kind = K_BTN; s.rect = swap; widgets.push_back(s);
         Widget b; b.id = ID_BG_CLEAR; b.kind = K_BTN; b.rect = clear; widgets.push_back(b);
     }
     y += RowH;
@@ -863,12 +874,12 @@ void Settings::LayoutStart(float left, float right, float top, float bottom) {
     RowLine(y, left, right);
     gfx::Text(dc, fBody, L"空闲自动锁定", D2D1::RectF(left, y, left + 200, y + RowH), Color(design::Text));
     {
-        Rect field{ right - 76, y + design::Gap12, right, y + design::Gap12 + ControlH };
-        DrawField(field, idleText, ID_EDIT_IDLE, false, true, L"0");
         const std::wstring unit = L"分钟（0 = 不锁）";
         float unitW = gfx::Measure(fSmall, unit);
-        gfx::Text(dc, fSmall, unit, D2D1::RectF(field.l - design::Gap12 - unitW, y, field.l - design::Gap12, y + RowH),
-                  Color(design::TextDim));
+        Rect field{ right - unitW - design::Gap8 - 76, y + design::Gap12, right - unitW - design::Gap8,
+                    y + design::Gap12 + ControlH };
+        DrawField(field, idleText, ID_EDIT_IDLE, false, true, L"0");
+        gfx::Text(dc, fSmall, unit, D2D1::RectF(field.r + design::Gap8, y, right, y + RowH), Color(design::TextDim));
     }
     y += RowH;
 
@@ -983,7 +994,7 @@ void Settings::CommitIdle() {
     if (minutes == app::cfg.IdleLockMinutes) return;
     app::cfg.IdleLockMinutes = minutes;
     idleText = std::to_wstring(minutes);
-    FlushSave();
+    MarkDirty();
 }
 
 // 启动时自动查到了新版：直接开在关于页，按钮已经可以点了。
@@ -1139,8 +1150,9 @@ void Settings::DrawField(const Rect& r, const std::wstring& text, int id, bool p
     st.border = Color(focused ? design::Accent : (enabled ? design::InputBorder : design::Line));
     st.fg = Color(enabled ? design::Text : design::TextMuted);
     st.hint = Color(design::TextMuted);
+    // 没拿到焦点的输入框不画光标，否则看着像随时能打字。
     gfx::Field(dc, fControl, design::FontControl, D2D1::RectF(r.l, r.t, r.r, r.b), text, hint.c_str(), st,
-               enabled, caretOn);
+               enabled, focused && caretOn);
 
     Widget wg;
     wg.id = id;
@@ -1178,8 +1190,9 @@ void Settings::PickBackgroundImage() {
     if (GetOpenFileNameW(&ofn)) {
         app::cfg.BackgroundImage = path;
         app::cfg.BackgroundSnapshot = false;
+        app::cfg.BackgroundMode = L"image";
         previewLoaded = false;
-        QueueSave();
+        MarkDirty();
         Invalidate();
     }
 }
@@ -1194,7 +1207,7 @@ void Settings::ApplySlider(int id, float x) {
         if (id == ID_SLIDER_RADIUS) app::cfg.CornerRadius = rounded;
         else if (id == ID_SLIDER_BLUR) { app::cfg.BlurRadius = rounded; }
         else if (id == ID_SLIDER_MASK) app::cfg.MaskOpacity = rounded;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
@@ -1205,7 +1218,7 @@ void Settings::Apply(int id) {
     if (id == ID_FONT_CLOCK) { OpenFontDialog(true); return; }
     if (id == ID_FONT_CLOCK_ON) {
         app::cfg.ClockFontEnabled = !app::cfg.ClockFontEnabled;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
@@ -1231,7 +1244,7 @@ void Settings::Apply(int id) {
         const LockTheme& t = themes::All()[id - ID_PILL_BASE];
         app::cfg.ThemeId = t.Id;
         previewLoaded = false;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
@@ -1239,35 +1252,36 @@ void Settings::Apply(int id) {
         ShellExecuteW(nullptr, L"open", themes::Dir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return;
     }
-    if (id == ID_BG_PICK) { PickBackgroundImage(); return; }
+    // 背景三选：切样式只改 BackgroundMode，图片路径留着，切回来还是上次那张。
+    if (id == ID_BG_PICK || id == ID_BG_SWAP) { PickBackgroundImage(); return; }
     if (id == ID_BG_CLEAR) {
         app::cfg.BackgroundImage.clear();
-        app::cfg.BackgroundSnapshot = false;
+        app::cfg.BackgroundMode = L"solid";
         previewLoaded = false;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
     if (id == ID_BG_SOLID) {
-        app::cfg.BackgroundImage.clear();
-        app::cfg.BackgroundSnapshot = false;
+        app::cfg.BackgroundMode = L"solid";
         previewLoaded = false;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
     if (id == ID_BG_SNAP) {
-        app::cfg.BackgroundImage.clear();
-        app::cfg.BackgroundSnapshot = true;
+        app::cfg.BackgroundMode = L"snapshot";
         previewLoaded = false;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
     if (id == ID_BG_IMAGE) {
-        app::cfg.BackgroundSnapshot = false;
+        app::cfg.BackgroundMode = L"image";
+        previewLoaded = false;
+        MarkDirty();
+        Invalidate();
         if (app::cfg.BackgroundImage.empty()) PickBackgroundImage();
-        else { previewLoaded = false; QueueSave(); Invalidate(); }
         return;
     }
     if (id == ID_BG_COLOR) {
@@ -1286,17 +1300,16 @@ void Settings::Apply(int id) {
                          GetGValue(cc.rgbResult), GetBValue(cc.rgbResult));
             app::cfg.BackgroundColor = buf;
             previewLoaded = false;
-            QueueSave();
+            MarkDirty();
             Invalidate();
         }
         return;
     }
-    if (id == ID_SHOW_CLOCK) { app::cfg.ShowClock = !app::cfg.ShowClock; QueueSave(); Invalidate(); return; }
-    if (id == ID_SNAPSHOT) { app::cfg.BackgroundSnapshot = !app::cfg.BackgroundSnapshot; QueueSave(); Invalidate(); return; }
+    if (id == ID_SHOW_CLOCK) { app::cfg.ShowClock = !app::cfg.ShowClock; MarkDirty(); Invalidate(); return; }
 
     if (id == ID_SHOW_SUBTITLE) {
         app::cfg.ShowSubtitle = !app::cfg.ShowSubtitle;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
@@ -1325,19 +1338,19 @@ void Settings::Apply(int id) {
     }
     if (id == ID_INTERCEPT_WINL) {
         app::cfg.InterceptWinL = !app::cfg.InterceptWinL;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
     if (id == ID_HOTKEY) {
         app::cfg.CustomHotkeyEnabled = !app::cfg.CustomHotkeyEnabled;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
     if (id == ID_LOCK_ON_START) {
         app::cfg.LockOnStartup = !app::cfg.LockOnStartup;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
@@ -1356,14 +1369,14 @@ void Settings::Apply(int id) {
     }
     if (id == ID_ELEVATED) {
         app::cfg.RunElevated = !app::cfg.RunElevated;
-        QueueSave();
+        MarkDirty();
         SetStatus(L"已保存，下次启动时申请管理员权限", false);
         Invalidate();
         return;
     }
     if (id == ID_BLOCK_HOTKEYS) {
         app::cfg.BlockSystemHotkeys = !app::cfg.BlockSystemHotkeys;
-        QueueSave();
+        MarkDirty();
         Invalidate();
         return;
     }
@@ -1382,7 +1395,22 @@ void Settings::Apply(int id) {
         Invalidate();
         return;
     }
+    if (id == ID_APPLY_ALL) {
+        SaveNow();
+        return;
+    }
+    if (id == ID_APPLY_CLOSE) {
+        SaveNow();
+        DestroyWindow(hwnd);
+        return;
+    }
     if (id == ID_CLOSE) {
+        if (dirty) {
+            // 没点应用就关，等于放弃这些改动：把内存里的 cfg 恢复成文件里的样子。
+            app::LoadConfig();
+            previewLoaded = false;
+            dirty = false;
+        }
         DestroyWindow(hwnd);
         return;
     }
@@ -1394,6 +1422,11 @@ std::wstring LeafName(const std::wstring& path) {
 }
 
 void Settings::ClickAt(float x, float y, bool down) {
+    // 字体浮层是窗口里的一层遮罩：点卡片外面等于取消，别让点击漏到下面的页面上。
+    if (fontOpen && !fontRect.Has(x, y)) {
+        if (down) CloseFontDialog();
+        return;
+    }
     // 框内按钮（密码框里的眼睛）压在输入框上面，命中时优先取它。
     int hit = -1;
     for (int i = 0; i < (int)widgets.size(); ++i) {
@@ -1533,8 +1566,6 @@ void Settings::ApplyScale(float s) {
 }
 
 void Settings::DestroyAll() {
-    if (saveTimer) { KillTimer(hwnd, 3); saveTimer = 0; }
-    app::SaveConfig();
     if (hwnd) KillTimer(hwnd, 4);
     preview.DropDeviceResources();
     ReleaseFmt(&fBrand);
@@ -1664,7 +1695,6 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (self->dragSlider) {
             self->dragSlider = 0;
             ReleaseCapture();
-            self->FlushSave();
             return 0;
         }
         int pressed = self->pressed;
@@ -1672,9 +1702,15 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (pressed >= 0) {
             ReleaseCapture();
             float x = GET_X_LPARAM(lp) / self->scale, y = GET_Y_LPARAM(lp) / self->scale;
+            bool applied = false;
             for (const Widget& wg : self->widgets) {
-                if (wg.id == pressed && wg.rect.Has(x, y)) { self->Apply(pressed); break; }
+                if (wg.id == pressed && wg.rect.Has(x, y)) {
+                    applied = true;
+                    break;
+                }
             }
+            // Apply 里点「关闭」会销毁窗口，self 随之 delete，这一句之后不能再碰 self。
+            if (applied) { self->Apply(pressed); return 0; }
             self->Invalidate();
         }
         return 0;
@@ -1695,7 +1731,6 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_TIMER:
-        if (wp == 3) self->FlushSave();
         if (wp == 4 && self->focus) { self->caretOn = !self->caretOn; self->Invalidate(); }
         return 0;
     case WM_CHAR: {
@@ -1726,7 +1761,7 @@ LRESULT CALLBACK Settings::Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             app::cfg.Subtitle = self->subtitleText;
-            self->QueueSave();
+            self->MarkDirty();
         } else if (self->focus == ID_EDIT_IDLE) {
             if (ch == 8) {
                 if (self->idleText.empty()) return 0;

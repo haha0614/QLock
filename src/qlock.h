@@ -30,6 +30,7 @@ struct Config {
     std::wstring BackgroundColor;     // 纯色背景；空表示用主题自带的底色
     std::wstring BackgroundImage;
     bool        BackgroundSnapshot = false;
+    std::wstring BackgroundMode;      // "solid" | "snapshot" | "image"；空表示按上面两个旧字段推断
     int         BlurRadius = -1;
     bool        BlockSystemHotkeys = true;
     std::wstring ClockFont;
@@ -75,6 +76,8 @@ bool HasPassword();
 bool VerifyPassword(const std::wstring& password);
 void SetPassword(const std::wstring& password);   // 写 Hash/Salt/Cipher 并立即保存
 std::wstring StoredPassword();                    // 解出 DPAPI 那份明文，只给设置页回显
+// 背景样式：0 纯色、1 屏幕截图、2 自定义图片。旧的配置文件没有 BackgroundMode，就按老字段推断。
+int BackgroundKind();
 // 恢复码：10 位（形如 XXXXX-XXXXX），和密码一样走 PBKDF2-SHA256；用一次就作废。
 std::wstring NewRecoveryCode();
 void SetRecovery(const std::wstring& code);     // 写 Hash/Salt 并立即保存

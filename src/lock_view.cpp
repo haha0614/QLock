@@ -72,7 +72,9 @@ void View::Reload(ID2D1DeviceContext* dc) {
 
 void View::LoadWallpaper(ID2D1DeviceContext* dc) {
     if (wallpaper || !dc) return;
-    const std::wstring& path = imageOverride.empty() ? app::cfg.BackgroundImage : imageOverride;
+    // 只有背景样式选了「自定义图片」才用文件；切到纯色/截图时路径还留着，但不再显示。
+    const std::wstring path = !imageOverride.empty() ? imageOverride
+                             : (app::BackgroundKind() == 2 ? app::cfg.BackgroundImage : std::wstring());
     if (path.empty()) {
         BITMAP bm = {};
         if (snapshot && GetObjectW(snapshot, sizeof(bm), &bm) && bm.bmBits && bm.bmWidth > 0 && bm.bmHeight > 0) {
@@ -143,8 +145,9 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
     float clockH = showClock ? (float)theme.Clock.Size * 1.32f : 0.0f;
     float dateH = showClock ? (float)theme.Date.Size * 1.5f + 2.0f : 0.0f;
     float dateGap = showClock ? (float)theme.Date.Gap : 0.0f;
-    float brandH = theme.Brand.Show ? (float)theme.Brand.Size * 1.7f + (float)theme.Brand.Gap : 0.0f;
-    float subH = showSub ? (float)theme.Subtitle.Size * 1.7f + (float)theme.Subtitle.Gap : 0.0f;
+    // 行高取 DWrite 排出来的真实值，再让 Gap 当纯间距——用字号乘系数估会让提示文字出现时行距忽大忽小。
+    float brandH = theme.Brand.Show ? gfx::LineHeight(brandFmt) + (float)theme.Brand.Gap : 0.0f;
+    float subH = showSub ? gfx::LineHeight(subFmt) + (float)theme.Subtitle.Gap : 0.0f;
     float inputH = (float)theme.Input.Height;
     float btnH = (float)theme.Button.Height;
     float btnGap = (float)theme.Button.Gap;
@@ -176,6 +179,8 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
         D2D1_RECT_F dest = D2D1::RectF((w - dw) / 2, (h - dh) / 2, (w + dw) / 2, (h + dh) / 2);
         dc->PushAxisAlignedClip(D2D1::RectF(0, 0, w, h), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
         float radius = BlurRadius();
+        // 0 和 1 看起来该是一回事：一两像素的模糊在压暗以后根本看不出来，直接当没开。
+        if (radius <= 1.0f) radius = 0;
         // 模糊半径是屏幕上的像素，效果作用在原图坐标里，先换算回原图尺度。
         EnsureBlur(dc, radius > 0 ? radius * 0.5f / (s > 0 ? s : 1.0f) : 0.0f);
         if (blur && radius > 0) {
@@ -194,7 +199,8 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
     int dimAlpha = app::cfg.MaskOpacity >= 0 ? (int)(app::cfg.MaskOpacity * 255.0 / 100.0 + 0.5)
                                              : theme.Background.Dim;
     if (dimAlpha > 0) {
-        D2D1_COLOR_F dim = bgColor;
+        // 压暗层盖在照片/截图上时统一用黑色，不然换个主题底色就跟着变，同一张背景两张图亮度不一样。
+        D2D1_COLOR_F dim = wallpaper ? gfx::Color(0xFF000000) : bgColor;
         dim.a = (dimAlpha > 255 ? 255 : dimAlpha) / 255.0f;
         gfx::FillRect(dc, D2D1::RectF(0, 0, w, h), dim);
     }
@@ -223,8 +229,16 @@ void View::Draw(ID2D1DeviceContext* dc, float w, float h) {
         D2D1_ROUNDED_RECT box = D2D1::RoundedRect(D2D1::RectF(left, top, left + colW, top + cardH),
                                                   gfx::Radius((float)theme.Card.Radius, 0),
                                                   gfx::Radius((float)theme.Card.Radius, 0));
-        gfx::FillRound(dc, box, themes::Color(theme.Card.Bg, gfx::Color(0xD81C1C26)));
-        gfx::StrokeRound(dc, box, themes::Color(theme.Card.Border, gfx::Color(0x37FFFFFF)), 1.0f);
+        const float cardR = gfx::Radius((float)theme.Card.Radius, 0);
+        if (cardR > 0.5f) {
+            gfx::FillSmooth(dc, D2D1::RectF(left, top, left + colW, top + cardH), cardR,
+                            themes::Color(theme.Card.Bg, gfx::Color(0xD81C1C26)));
+            gfx::StrokeSmooth(dc, D2D1::RectF(left, top, left + colW, top + cardH), cardR,
+                              themes::Color(theme.Card.Border, gfx::Color(0x37FFFFFF)), 1.0f);
+        } else {
+            gfx::FillRect(dc, D2D1::RectF(left, top, left + colW, top + cardH),
+                          themes::Color(theme.Card.Bg, gfx::Color(0xD81C1C26)));
+        }
         top += (float)theme.Card.PadV;
         left += (float)theme.Card.PadH;
     }
@@ -310,6 +324,7 @@ void View::DrawField(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const std::
     st.dotStep = design::DotStep;
     st.dotRadius = design::DotRadius;
     st.dots = true;
+    st.smooth = !st.underline;   // 锁屏的输入框用连续曲率圆角
     st.bg = themes::Color(theme.Input.Bg, gfx::Color(0xFF1E2129));
     st.border = themes::Color(theme.Input.Border, gfx::Color(st.underline ? 0xFF2A2F38 : 0xFF4A4F5A));
     st.fg = themes::Color(theme.Input.Fg, gfx::Color(0xFFFFFFFF));
@@ -322,12 +337,10 @@ void View::DrawButton(ID2D1DeviceContext* dc, const D2D1_RECT_F& box, const wcha
     const bool flat = _wcsicmp(theme.Button.Kind.c_str(), L"text") == 0;
     float radius = gfx::Radius((float)theme.Button.Radius, box.bottom - box.top);
     if (!flat) {
-        gfx::FillRound(dc, D2D1::RoundedRect(box, radius, radius),
-                       themes::Color(theme.Button.Bg, gfx::Color(0xFF3A76E8)));
+        gfx::FillSmooth(dc, box, radius, themes::Color(theme.Button.Bg, gfx::Color(0xFF3A76E8)));
     }
     if (outline) {
-        gfx::StrokeRound(dc, D2D1::RoundedRect(box, radius, radius),
-                         themes::Color(theme.Button.Border, gfx::Color(0x50FFFFFF)), 1.0f);
+        gfx::StrokeSmooth(dc, box, radius, themes::Color(theme.Button.Border, gfx::Color(0x50FFFFFF)), 1.0f);
     }
     gfx::Text(dc, btnFmt, label, box, themes::Color(theme.Button.Fg, gfx::Color(0xFFFFFFFF)));
 }

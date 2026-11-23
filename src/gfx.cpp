@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include "gfx.h"
 #include "qlock.h"
 
@@ -96,6 +97,88 @@ void StrokeRound(ID2D1DeviceContext* dc, const D2D1_ROUNDED_RECT& r, D2D1_COLOR_
     }
 }
 
+namespace {
+
+// 一个角的连续曲率采样：t 从 0 到 1，(x,y) 从直边切点走到另一条边的切点。
+// x=(1-t)^a、y=t^a 在两端的一阶、二阶导都退化成零，所以接上直边时曲率是连续的。
+const int kCornerSteps = 24;
+const double kCurveA = 2.5;
+
+ID2D1PathGeometry* SmoothPath(const D2D1_RECT_F& box, float radius) {
+    const float w = box.right - box.left, h = box.bottom - box.top;
+    if (w <= 0 || h <= 0) return nullptr;
+    float r = radius;
+    if (r > w * 0.5f) r = w * 0.5f;
+    if (r > h * 0.5f) r = h * 0.5f;
+    if (r < 0.5f) return nullptr;
+
+    ID2D1PathGeometry* path = nullptr;
+    if (FAILED(g_d2d->CreatePathGeometry(&path)) || !path) return nullptr;
+    ID2D1GeometrySink* sink = nullptr;
+    if (FAILED(path->Open(&sink)) || !sink) {
+        path->Release();
+        return nullptr;
+    }
+    sink->BeginFigure(D2D1::Point2F(box.left + r, box.top), D2D1_FIGURE_BEGIN_FILLED);
+
+    // (cx,cy) 是角点，sx/sy 指向角的两条边：+1 往右/下，-1 往左/上。
+    // verticalFirst 表示这段曲线从竖边出发、落到横边（顺时针走的时候右下角和左上角是这样）。
+    auto corner = [&](float cx, float cy, float sx, float sy, bool verticalFirst) {
+        for (int i = 1; i <= kCornerSteps; ++i) {
+            const double t = (double)i / kCornerSteps;
+            const double lin = std::pow(t, kCurveA) * r;
+            const double bend = std::pow(1.0 - t, kCurveA) * r;
+            const float dx = (float)(verticalFirst ? lin : bend);
+            const float dy = (float)(verticalFirst ? bend : lin);
+            sink->AddLine(D2D1::Point2F(cx + sx * dx, cy + sy * dy));
+        }
+    };
+
+    sink->AddLine(D2D1::Point2F(box.right - r, box.top));
+    corner(box.right, box.top, -1.0f, 1.0f, false);
+    sink->AddLine(D2D1::Point2F(box.right, box.bottom - r));
+    corner(box.right, box.bottom, -1.0f, -1.0f, true);
+    sink->AddLine(D2D1::Point2F(box.left + r, box.bottom));
+    corner(box.left, box.bottom, 1.0f, -1.0f, false);
+    sink->AddLine(D2D1::Point2F(box.left, box.top + r));
+    corner(box.left, box.top, 1.0f, 1.0f, true);
+
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    sink->Close();
+    sink->Release();
+    return path;
+}
+
+}  // namespace
+
+void FillSmooth(ID2D1DeviceContext* dc, const D2D1_RECT_F& r, float radius, D2D1_COLOR_F c) {
+    ID2D1PathGeometry* path = SmoothPath(r, radius);
+    if (!path) {
+        FillRound(dc, D2D1::RoundedRect(r, radius, radius), c);
+        return;
+    }
+    ID2D1SolidColorBrush* brush = nullptr;
+    if (SUCCEEDED(dc->CreateSolidColorBrush(c, &brush))) {
+        dc->FillGeometry(path, brush);
+        brush->Release();
+    }
+    path->Release();
+}
+
+void StrokeSmooth(ID2D1DeviceContext* dc, const D2D1_RECT_F& r, float radius, D2D1_COLOR_F c, float width) {
+    ID2D1PathGeometry* path = SmoothPath(r, radius);
+    if (!path) {
+        StrokeRound(dc, D2D1::RoundedRect(r, radius, radius), c, width);
+        return;
+    }
+    ID2D1SolidColorBrush* brush = nullptr;
+    if (SUCCEEDED(dc->CreateSolidColorBrush(c, &brush))) {
+        dc->DrawGeometry(path, brush, width);
+        brush->Release();
+    }
+    path->Release();
+}
+
 void TextWrapped(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
                  const D2D1_RECT_F& box, D2D1_COLOR_F c) {
     if (!fmt || s.empty()) return;
@@ -139,6 +222,16 @@ float Measure(IDWriteTextFormat* fmt, const std::wstring& s) {
     return m.widthIncludingTrailingWhitespace;
 }
 
+float LineHeight(IDWriteTextFormat* fmt) {
+    if (!fmt) return 0;
+    IDWriteTextLayout* layout = nullptr;
+    if (FAILED(g_dw->CreateTextLayout(L"Ag中", 3, fmt, 4000.0f, 400.0f, &layout))) return 0;
+    DWRITE_TEXT_METRICS m = {};
+    layout->GetMetrics(&m);
+    layout->Release();
+    return m.height;
+}
+
 IDWriteTextFormat* Format(const std::wstring& family, float size, int weight, DWRITE_TEXT_ALIGNMENT align) {
     IDWriteTextFormat* fmt = nullptr;
     std::wstring face = family.empty() ? L"Microsoft YaHei UI" : family;
@@ -165,9 +258,14 @@ void Field(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, float fontSize, const
         const float fh = box.bottom - box.top;
         const float rad = st.globalRadius ? Radius(st.radius, fh)
                                           : (st.radius < fh * 0.5f ? st.radius : fh * 0.5f);
-        D2D1_ROUNDED_RECT r = D2D1::RoundedRect(box, rad, rad);
-        FillRound(dc, r, st.bg);
-        StrokeRound(dc, r, st.border, 1.0f);
+        if (st.smooth) {
+            FillSmooth(dc, box, rad, st.bg);
+            StrokeSmooth(dc, box, rad, st.border, 1.0f);
+        } else {
+            D2D1_ROUNDED_RECT r = D2D1::RoundedRect(box, rad, rad);
+            FillRound(dc, r, st.bg);
+            StrokeRound(dc, r, st.border, 1.0f);
+        }
     }
 
     const float inset = st.underline ? 0.0f : st.inset;

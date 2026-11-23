@@ -396,7 +396,8 @@ void LockScreensCreate() {
         app::Log(L"lock: factories failed");
         return;
     }
-    if (!GetClassInfoW(app::inst, kClass, nullptr)) {
+    WNDCLASSEXW existing = { sizeof(existing) };
+    if (!GetClassInfoExW(app::inst, kClass, &existing)) {
         WNDCLASSEXW wc = {};
         wc.cbSize = sizeof(wc);
         wc.lpfnWndProc = Overlay::Proc;
@@ -409,7 +410,7 @@ void LockScreensCreate() {
     std::vector<RECT> rects = MonitorRects();
 
     // 先抓屏再建窗口，否则后面几块屏会把自己刚盖上去的黑窗抓进去。
-    const bool snapshot = app::cfg.BackgroundSnapshot && app::cfg.BackgroundImage.empty();
+    const bool snapshot = app::BackgroundKind() == 1;
     std::vector<HBITMAP> shots;
     if (snapshot) {
         for (const RECT& rc : rects) shots.push_back(CaptureScreen(rc));

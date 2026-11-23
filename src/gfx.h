@@ -26,6 +26,12 @@ void FillRect(ID2D1DeviceContext* dc, const D2D1_RECT_F& r, D2D1_COLOR_F c);
 void FillRound(ID2D1DeviceContext* dc, const D2D1_ROUNDED_RECT& r, D2D1_COLOR_F c);
 void StrokeRound(ID2D1DeviceContext* dc, const D2D1_ROUNDED_RECT& r, D2D1_COLOR_F c, float width);
 
+// 连续曲率圆角（iOS/Figma 那种 squircle 观感）。Windows 没有原生 API，这里按
+// 「曲率在直边接缝处归零」的样条族 x=(1-t)^a、y=t^a 采样成路径，a≈2.5。
+// 锁屏的卡片、输入框、按钮用它；设置窗的控件仍是普通圆角。
+void FillSmooth(ID2D1DeviceContext* dc, const D2D1_RECT_F& r, float radius, D2D1_COLOR_F c);
+void StrokeSmooth(ID2D1DeviceContext* dc, const D2D1_RECT_F& r, float radius, D2D1_COLOR_F c, float width);
+
 // 单行文字，按 rect 的左上角开始排，垂直居中。
 void Text(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
           const D2D1_RECT_F& box, D2D1_COLOR_F c);
@@ -33,6 +39,8 @@ void Text(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
 void TextWrapped(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
                  const D2D1_RECT_F& box, D2D1_COLOR_F c);
 float Measure(IDWriteTextFormat* fmt, const std::wstring& s);
+// 单行文字的实际行高（DWrite 的排版结果），排垂直间距时用它，别按字号估。
+float LineHeight(IDWriteTextFormat* fmt);
 
 // 水平居中：按钮、药丸、开关旁的小标签用它；普通文字仍用 Text（左对齐）。
 void TextCentered(ID2D1DeviceContext* dc, IDWriteTextFormat* fmt, const std::wstring& s,
@@ -53,6 +61,7 @@ struct FieldStyle {
     float dotRadius = 0.23f;  // 圆点半径，相对字号
     float rightInset = 0.0f;  // 右侧留给框内按钮（比如密码的眼睛图标）的宽度
     bool globalRadius = true; // 设置窗的控件用固定圆角，不跟锁屏那几个字一起变
+    bool smooth = false;      // 锁屏用连续曲率圆角，设置窗用普通圆弧
     bool underline = false;
     bool dots = false;        // 密码框：不显示字符，画圆点
     bool caret = true;
