@@ -22,6 +22,23 @@ void Release(T** p) {
     if (*p) { (*p)->Release(); *p = nullptr; }
 }
 
+// 锁屏是从托盘、空闲计时器或热键起来的，这时候前台还压在别的窗口上，裸 SetForegroundWindow 会被前台锁
+// 挡回来，覆盖层就只能「看着在最上面、其实没有焦点」，打字全被钩子吞掉。先把自己的输入队列挂到前台
+// 线程上再抢，抢完断开，抢回来才拿得到键盘。
+bool ForceForeground(HWND hwnd) {
+    if (!hwnd) return false;
+    if (GetForegroundWindow() == hwnd) return true;
+    HWND fg = GetForegroundWindow();
+    const DWORD target = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
+    const DWORD own = GetCurrentThreadId();
+    bool attached = false;
+    if (target != 0 && target != own) attached = AttachThreadInput(own, target, TRUE) != FALSE;
+    const bool ok = SetForegroundWindow(hwnd) != FALSE;
+    if (attached) AttachThreadInput(own, target, FALSE);
+    if (ok) SetFocus(hwnd);
+    return ok;
+}
+
 class Overlay {
 public:
     HWND hwnd = nullptr;
@@ -43,8 +60,8 @@ public:
         UpdateScale();
         if (!EnsureTarget()) return false;
         ShowWindow(hwnd, SW_SHOW);
-        SetForegroundWindow(hwnd);
-        SetFocus(hwnd);
+        const bool fg = ForceForeground(hwnd);
+        app::Log(L"overlay foreground=%d", fg ? 1 : 0);
         SetTimer(hwnd, 1, 500, nullptr);
         SetTimer(hwnd, 2, 350, nullptr);
         return true;
@@ -233,8 +250,16 @@ public:
     void Guard() {
         if (!IsWindowVisible(hwnd)) ShowWindow(hwnd, SW_SHOW);
         if (GetForegroundWindow() != hwnd) {
-            SetForegroundWindow(hwnd);
+            const bool ok = ForceForeground(hwnd);
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (!ok) {
+                static DWORD last = 0;
+                const DWORD now = GetTickCount();
+                if (now - last > 2000) {
+                    last = now;
+                    app::Log(L"reclaim failed, current=%p", (void*)GetForegroundWindow());
+                }
+            }
         }
     }
 
@@ -351,6 +376,11 @@ bool LockScreensAlive() {
     return !g_windows.empty();
 }
 
+// 主屏那块覆盖层：按键要被吞的时候，字符往这里送。
+HWND LockScreensPrimary() {
+    return g_windows.empty() ? nullptr : g_windows[0]->hwnd;
+}
+
 // GDI 抓一块屏，给「用屏幕截图做模糊背景」用；返回的位图交给 Overlay 释放。
 static HBITMAP CaptureScreen(const RECT& rc) {
     const int w = rc.right - rc.left, h = rc.bottom - rc.top;
@@ -448,7 +478,7 @@ void LockScreensGuard() {
 
 void LockScreensReclaim() {
     LockScreensGuard();
-    if (!g_windows.empty() && g_windows[0]->hwnd) SetForegroundWindow(g_windows[0]->hwnd);
+    if (!g_windows.empty() && g_windows[0]->hwnd) ForceForeground(g_windows[0]->hwnd);
 }
 
 void LockScreensSetError(const std::wstring& text) {

@@ -121,5 +121,6 @@ void LockScreensGuard();
 void LockScreensReclaim();
 bool LockScreensContain(HWND hwnd);
 bool LockScreensAlive();
+HWND LockScreensPrimary();
 void LockScreensSetError(const std::wstring& text);
 void LockScreensLayoutChanged();

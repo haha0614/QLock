@@ -87,6 +87,29 @@ void TrayMenu() {
     DestroyMenu(menu);
 }
 
+// 前台被别的程序抢走时，钩子把按键全吞了，窗口根本收不到，看起来就是「怎么打都没反应」。
+// 这里把吞掉的键翻成字符直接投给覆盖层：字母数字走 WM_CHAR，退格和回车走 WM_KEYDOWN。
+void FeedLockKey(DWORD vk, bool down, bool winDown, bool alt, bool ctrl) {
+    if (!down || winDown) return;
+    if (alt && !ctrl) return;  // Alt+键 在窗口里是 WM_SYSCHAR，输入框本来也不认
+    HWND target = LockScreensPrimary();
+    if (!target) return;
+    if (vk == VK_BACK || vk == VK_RETURN) {
+        PostMessageW(target, WM_KEYDOWN, (WPARAM)vk, 0);
+        return;
+    }
+    HWND fg = GetForegroundWindow();
+    const HKL layout = GetKeyboardLayout(fg ? GetWindowThreadProcessId(fg, nullptr) : 0);
+    BYTE state[256] = {};
+    if (!GetKeyboardState(state)) return;
+    const UINT scan = MapVirtualKeyW((UINT)vk, MAPVK_VK_TO_VSC);
+    wchar_t buf[8] = {};
+    const int n = ToUnicodeEx((UINT)vk, scan, state, buf, 8, 0, layout);
+    for (int i = 0; i < n; ++i) {
+        if (buf[i] >= 32 && buf[i] != 127) PostMessageW(target, WM_CHAR, (WPARAM)buf[i], 0);
+    }
+}
+
 LRESULT CALLBACK HookProc(int code, WPARAM wp, LPARAM lp) {
     if (code != HC_ACTION) return CallNextHookEx(g_hook, code, wp, lp);
     KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lp;
@@ -120,6 +143,7 @@ LRESULT CALLBACK HookProc(int code, WPARAM wp, LPARAM lp) {
             g_lastBlockLog = now;
             app::Log(L"input blocked, current=%p", (void*)fg);
         }
+        FeedLockKey(vk, down, g_winDown, alt, ctrl);
         return 1;
     }
 
