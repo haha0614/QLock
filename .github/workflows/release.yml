@@ -34,6 +34,7 @@ jobs:
         run: ./tools/pack.ps1
 
       - name: Release notes from CHANGELOG
+        id: notes
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME -replace '^v', ''
@@ -50,10 +51,12 @@ jobs:
           $text = ($out -join [Environment]::NewLine).Trim()
           if (-not $text) { $text = "QLock $env:GITHUB_REF_NAME" }
           Set-Content -Path release-notes.md -Value $text -Encoding utf8
+          "tag=$tag" >> $env:GITHUB_OUTPUT
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          name: QLock ${{ steps.notes.outputs.tag }} (C++ / Direct2D)
           fail_on_unmatched_files: true
           body_path: release-notes.md
           files: |
