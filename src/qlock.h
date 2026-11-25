@@ -85,6 +85,11 @@ void ClearRecovery();
 bool HasRecovery();
 bool VerifyRecovery(const std::wstring& code);
 
+// 自启项写的是 "<exe>" --tray，手动双击是空参数；提权重开带 --elevated，这三种都算正常启动。
+bool TrayLaunch(const std::vector<std::wstring>& args);
+// 正常启动且开了「启动后立即锁定」才锁；升级完自己重启带 --updated，不重复锁。
+bool ShouldLockOnStart(const std::vector<std::wstring>& args, bool lockOnStartup);
+
 std::wstring ClockFontName();    // 时钟字体没开或没挑过就回落界面字体
 long long UtcTicksNow();         // 和 .NET DateTime.UtcNow.Ticks 同一把尺子，配置里存的是它
 std::wstring UiFontName();

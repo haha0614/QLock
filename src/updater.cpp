@@ -347,7 +347,7 @@ bool Restart(const std::wstring& exe, std::wstring* error) {
     command += comspec;
     command += L"\" /c ping -n 3 127.0.0.1 >nul & start \"\" \"";
     command += exe;
-    command += L"\" --tray";
+    command += L"\" --tray --updated";
     STARTUPINFOW si = { sizeof(si) };
     PROCESS_INFORMATION pi = {};
     if (!CreateProcessW(nullptr, &command[0], nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,

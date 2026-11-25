@@ -243,7 +243,19 @@ int main(int, char**) {
           L"sha256 of abc");
     Check(updater::Sha256File(root + L"\\missing.bin").empty(), L"missing file has no hash");
 
-    Out(L"== 12. 时间戳 ==");
+    Out(L"== 12. 启动参数 ==");
+    Check(app::TrayLaunch({}), L"no args is a tray launch");
+    Check(app::TrayLaunch({ L"--tray" }), L"--tray is a tray launch");
+    Check(app::TrayLaunch({ L"--elevated", L"--tray" }), L"elevated relaunch is a tray launch");
+    Check(!app::TrayLaunch({ L"--lock" }), L"--lock is not a tray launch");
+    Check(app::ShouldLockOnStart({ L"--tray" }, true), L"autostart with lock-on-startup locks");
+    Check(app::ShouldLockOnStart({}, true), L"double click with lock-on-startup locks");
+    Check(!app::ShouldLockOnStart({ L"--tray" }, false), L"switch off means no lock");
+    Check(!app::ShouldLockOnStart({ L"--tray", L"--updated" }, true), L"restart after update does not lock");
+    Check(!app::ShouldLockOnStart({ L"--tray", L"--settings" }, true), L"settings launch does not lock");
+    Check(!app::ShouldLockOnStart({ L"--elevated", L"--tray", L"--updated" }, true), L"elevated update restart does not lock");
+
+    Out(L"== 13. 时间戳 ==");
     const long long ticks = app::UtcTicksNow();
     // 2020-01-01 到 2035-01-01，够松，只用来抓「单位和纪元搞错」。
     Check(ticks > 637000000000000000LL && ticks < 650000000000000000LL, L"utc ticks look like .NET ticks");

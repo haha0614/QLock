@@ -368,14 +368,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     }
     if (g_lifeSeconds > 0) g_lifeTimer = SetTimer(g_main, 2, 1000, nullptr);
 
+    // 开机自启、托盘启动、提权重开都算正常启动：这时候才查更新、才应用「启动后立即锁定」。
+    const bool normalLaunch = app::TrayLaunch(args);
     // 锁屏、设置这类带参数启动不查更新，免得测试和锁屏时跑网络。
-    if (args.empty() || HasArg(args, L"--tray", nullptr) || HasArg(args, L"--elevated", nullptr)) AutoCheckUpdate();
+    if (normalLaunch) AutoCheckUpdate();
 
     if (HasArg(args, L"--settings", nullptr)) {
         SettingsShow(g_main);
     } else if (HasArg(args, L"--lock", nullptr)) {
         DoLock();
-    } else if (args.empty() && app::cfg.LockOnStartup) {
+    } else if (app::ShouldLockOnStart(args, app::cfg.LockOnStartup)) {
         DoLock();
     }
 

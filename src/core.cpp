@@ -67,6 +67,23 @@ void Log(const wchar_t* fmt, ...) {
     out.write(text.data(), (std::streamsize)text.size());
 }
 
+static bool HasArg(const std::vector<std::wstring>& args, const wchar_t* name) {
+    for (const std::wstring& a : args) {
+        if (_wcsicmp(a.c_str(), name) == 0) return true;
+    }
+    return false;
+}
+
+bool TrayLaunch(const std::vector<std::wstring>& args) {
+    return args.empty() || HasArg(args, L"--tray") || HasArg(args, L"--elevated");
+}
+
+bool ShouldLockOnStart(const std::vector<std::wstring>& args, bool lockOnStartup) {
+    if (!lockOnStartup || !TrayLaunch(args)) return false;
+    return !HasArg(args, L"--settings") && !HasArg(args, L"--lock") && !HasArg(args, L"--updated") &&
+           !HasArg(args, L"--autounlock") && !HasArg(args, L"--exitafter");
+}
+
 std::wstring UiFontName() {
     return cfg.FontFamily.empty() ? L"Microsoft YaHei UI" : cfg.FontFamily;
 }
