@@ -89,6 +89,8 @@ bool VerifyRecovery(const std::wstring& code);
 bool TrayLaunch(const std::vector<std::wstring>& args);
 // 正常启动且开了「启动后立即锁定」才锁；升级完自己重启带 --updated，不重复锁。
 bool ShouldLockOnStart(const std::vector<std::wstring>& args, bool lockOnStartup);
+// 锁屏时要吞掉的系统组合键：Win 键、按住 Win 的任何键、Alt+Tab/Esc/F4、Ctrl/Shift+Esc、菜单键、PrintScreen。
+bool IsSystemCombo(UINT vk, bool winDown, bool ctrl, bool alt, bool shift);
 
 std::wstring ClockFontName();    // 时钟字体没开或没挑过就回落界面字体
 long long UtcTicksNow();         // 和 .NET DateTime.UtcNow.Ticks 同一把尺子，配置里存的是它

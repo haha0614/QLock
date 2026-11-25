@@ -255,7 +255,23 @@ int main(int, char**) {
     Check(!app::ShouldLockOnStart({ L"--tray", L"--settings" }, true), L"settings launch does not lock");
     Check(!app::ShouldLockOnStart({ L"--elevated", L"--tray", L"--updated" }, true), L"elevated update restart does not lock");
 
-    Out(L"== 13. 时间戳 ==");
+    Out(L"== 13. 锁屏按键 ==");
+    Check(app::IsSystemCombo(VK_LWIN, false, false, false, false), L"Win key is a system combo");
+    Check(app::IsSystemCombo(VK_RWIN, false, false, false, false), L"right Win key is a system combo");
+    Check(app::IsSystemCombo(L'E', true, false, false, false), L"any key while Win is held is a system combo");
+    Check(app::IsSystemCombo(VK_TAB, false, false, true, false), L"Alt+Tab is a system combo");
+    Check(app::IsSystemCombo(VK_ESCAPE, false, true, false, false), L"Ctrl+Esc is a system combo");
+    Check(app::IsSystemCombo(VK_ESCAPE, false, true, false, true), L"Ctrl+Shift+Esc is a system combo");
+    Check(app::IsSystemCombo(VK_F4, false, false, true, false), L"Alt+F4 is a system combo");
+    Check(app::IsSystemCombo(VK_APPS, false, false, false, false), L"menu key is a system combo");
+    Check(app::IsSystemCombo(VK_SNAPSHOT, false, false, false, false), L"PrintScreen is a system combo");
+    Check(!app::IsSystemCombo(L'A', false, false, false, false), L"plain letter is not a system combo");
+    Check(!app::IsSystemCombo(VK_BACK, false, false, false, false), L"Backspace is not a system combo");
+    Check(!app::IsSystemCombo(VK_TAB, false, false, false, false), L"plain Tab is not a system combo");
+    Check(!app::IsSystemCombo(VK_ESCAPE, false, false, false, false), L"plain Esc is not a system combo");
+    Check(!app::IsSystemCombo(VK_RETURN, false, false, false, false), L"Enter is not a system combo");
+
+    Out(L"== 14. 时间戳 ==");
     const long long ticks = app::UtcTicksNow();
     // 2020-01-01 到 2035-01-01，够松，只用来抓「单位和纪元搞错」。
     Check(ticks > 637000000000000000LL && ticks < 650000000000000000LL, L"utc ticks look like .NET ticks");

@@ -84,6 +84,17 @@ bool ShouldLockOnStart(const std::vector<std::wstring>& args, bool lockOnStartup
            !HasArg(args, L"--autounlock") && !HasArg(args, L"--exitafter");
 }
 
+bool IsSystemCombo(UINT vk, bool winDown, bool ctrl, bool alt, bool shift) {
+    if (vk == VK_LWIN || vk == VK_RWIN) return true;
+    if (winDown) return true;                    // Win 按住时的任何键（Win+E/D/R/Tab…）都是系统热键
+    if (vk == VK_TAB && alt) return true;
+    if (vk == VK_ESCAPE && (alt || ctrl || shift)) return true;
+    if (vk == VK_F4 && alt) return true;
+    if (vk == VK_APPS) return true;
+    if (vk == VK_SNAPSHOT) return true;
+    return false;
+}
+
 std::wstring UiFontName() {
     return cfg.FontFamily.empty() ? L"Microsoft YaHei UI" : cfg.FontFamily;
 }

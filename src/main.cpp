@@ -92,28 +92,24 @@ LRESULT CALLBACK HookProc(int code, WPARAM wp, LPARAM lp) {
     KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lp;
     DWORD vk = kb->vkCode;
     bool down = (wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN);
-    bool up = (wp == WM_KEYUP || wp == WM_SYSKEYUP);
 
     if (vk == VK_LWIN || vk == VK_RWIN) {
         if (down) g_winDown = true;
-        if (up) g_winDown = false;
+        else g_winDown = false;
     }
 
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
     bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     bool rightAlt = (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
 
     // 覆盖层没起来就别吞键：宁可锁屏失败，也不能把人卡在没界面的键盘黑洞里。
     if (app::locked && LockScreensAlive()) {
         HWND fg = GetForegroundWindow();
-        if (LockScreensContain(fg)) return CallNextHookEx(g_hook, code, wp, lp);
+        if (app::cfg.BlockSystemHotkeys && app::IsSystemCombo(vk, g_winDown, ctrl, alt, shift)) return 1;
 
-        // 系统热键拦不拦看设置；关掉时这些组合原样交给系统，其余按键照旧吞掉。
-        if (!app::cfg.BlockSystemHotkeys) {
-            bool systemCombo = (vk == VK_LWIN || vk == VK_RWIN) || g_winDown || (alt && vk == VK_TAB) ||
-                               ((ctrl || alt) && vk == VK_ESCAPE) || (alt && vk == VK_F4) || vk == VK_APPS;
-            if (systemCombo) return CallNextHookEx(g_hook, code, wp, lp);
-        }
+        // 前台是我们的窗口：文字得进密码框，放行。系统组合键在上面已经拦掉了。
+        if (LockScreensContain(fg)) return CallNextHookEx(g_hook, code, wp, lp);
 
         DWORD now = GetTickCount();
         if (now - g_lastReclaim > 400) {
